@@ -1,0 +1,11 @@
+extends layout
+
+block content
+  h1= title
+  p Welcome to #{title}
+
+
+  form.form-horizontal(action='/apidemo/uploadTSV', method='POST',enctype="multipart/form-data")
+    input(type='file', name='upload_csv', id='upload_csv')
+    br
+    button(type='submit') Submit

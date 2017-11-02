@@ -1,0 +1,21 @@
+doctype html
+html
+  head
+    title= title
+    link(rel='stylesheet', href='/stylesheets/style.css')
+    //script(src="socket.io.min.js")
+    script(src="jquery-1.4.2.js")
+    //- script.
+    //-  var socket = io.connect('http://localhost:3001');
+    //-   socket.on('connect', function () {
+    //-   socket.on('mqtt', function (msg) {
+    //-     alert('subrata:'+mqtt);
+    //-     var elmarr=msg.topic.split("/");
+    //-     var elm=elmarr[3];
+    //-     console.log(msg.topic+' '+msg.payload);
+    //-     $('#'.concat(elm)).html(msg.payload);
+    //-  });
+    //-  socket.emit('subscribe',{topic:'/sensor/OTGW/returntemp'});
+    //- });
+  body
+    block content
