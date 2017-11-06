@@ -4,68 +4,72 @@ var fs = require('fs');
 var csv = require('fast-csv');
 var multiparty = require('multiparty');
 var path = require('path');
+var async_node = require('async');
 var user = require('../models/User');
 var game_master = require('../models/Game_master');
 var dictionary = require('../models/Dictionary');
 var challenge = require('../models/Challenge');
 var friend = require('../models/Friend');
 var block_user = require('../models/Block_user');
+var test_game = require('../models/Test_game');
 var PushNotification = require('../utility/push-notification');
 //var push_notification = PushNotification();
 var router = express.Router();
 var live_url = 'http://182.75.72.148:3001/';
 var profile_image_url = 'http://182.75.72.148/smartfeud_image/uploads/smartfued_image/';
-var url_regexp = /(ftp|http|https):\/\/(\w+:{0,1}\w*@)?(\S+)(:[0-9]+)?(\/|\/([\w#!:.?+=&%@!\-\/]))?/ ;
+var url_regexp = /(ftp|http|https):\/\/(\w+:{0,1}\w*@)?(\S+)(:[0-9]+)?(\/|\/([\w#!:.?+=&%@!\-\/]))?/;
 var transporter = nodemailer.createTransport({
-  service: 'gmail',
-  auth: {
-    user: 'testdevloper007@gmail.com',
-    pass: 'Password@321'
-  }
+    service: 'gmail',
+    auth: {
+        user: 'testdevloper007@gmail.com',
+        pass: 'Password@321'
+    }
 });
 //--------------------------- Function for user registration ----------------------------//
-router.post('/userRegistration',function(req,res,next){
+router.post('/userRegistration', function(req, res, next) {
     var userName = req.body.username;
     var email = req.body.email;
     var password = req.body.password;
     var confirm_password = req.body.confirm_password;
     var has_error = 0;
     var error_section = [];
-    if(userName==''){
+    if (userName == '') {
         error_section.push("Username is rerquired.");
         has_error++;
-    }if(email==''){
+    }
+    if (email == '') {
         error_section.push("Email is rerquired.");
         has_error++;
-    }if(password==''){
+    }
+    if (password == '') {
         error_section.push("Password is rerquired.");
         has_error++;
     }
     var message = [];
     var result = {};
-    if(error_section.length>0){
+    if (error_section.length > 0) {
         result.message = 'error';
         result.error = error_section;
-    }else{
-        user.find({$or:[ {'name':userName}, {'email':email} ]},function(usr_err,usr_result){
-            if(usr_err){
+    } else {
+        user.find({ $or: [{ 'name': userName }, { 'email': email }] }, function(usr_err, usr_result) {
+            if (usr_err) {
                 res.send(usr_err);
-            }else{
-                if(usr_result.length>0){
+            } else {
+                if (usr_result.length > 0) {
                     error_section.push("This user is allready exist.");
                     result.status = 'error';
                     result.message = error_section;
                     res.json(result);
-                }else{
+                } else {
                     var user_details = new user();
                     user_details.name = userName;
                     user_details.email = email;
                     user_details.password = user_details.encryptPassword(password);
                     user_details._login_type = 2;
-                    user_details.save(function(save_err,save_result){
-                        if(save_err){
+                    user_details.save(function(save_err, save_result) {
+                        if (save_err) {
                             res.send(save_err);
-                        }else{
+                        } else {
                             result.status = 'success';
                             result.message = "Profile Successfully created.";
                             res.json(result);
@@ -77,49 +81,49 @@ router.post('/userRegistration',function(req,res,next){
     }
 });
 //---------------------------- Function for user Singin ----------------------------------//
-router.post('/login',function(req,res,next){
+router.post('/login', function(req, res, next) {
     //console.log("TEST");
     var login_type = req.body.login_type;
     var device_token = req.body.device_token;
     var response = {};
-    if(login_type==2){
+    if (login_type == 2) {
         var username = req.body.username;
         var password = req.body.password;
-        user.findOne({'name':username},function(usr_err,usr_result){
-            if(usr_err){
+        user.findOne({ 'name': username }, function(usr_err, usr_result) {
+            if (usr_err) {
                 res.send(usr_err);
-            }else{
-                if(usr_result){
+            } else {
+                if (usr_result) {
                     var get_result = usr_result;
                     var new_usr = new user();
                     new_usr.encryptPassword(password);
-                    if(!get_result.validPassword(password)){
+                    if (!get_result.validPassword(password)) {
                         response.status = "error";
                         response.message = "Password does not match";
                         res.json(response);
-                    }else{
+                    } else {
                         var getTime = new Date().getTime();
-                        var auth_token = get_result._id+getTime;
+                        var auth_token = get_result._id + getTime;
                         var usr_data = {};
                         usr_data.username = get_result.name;
                         usr_data.email = get_result.email;
-                        if(get_result.image){
-                            if(url_regexp.test(get_result.image)){
+                        if (get_result.image) {
+                            if (url_regexp.test(get_result.image)) {
                                 usr_data.image = get_result.image;
-                            }else{
-                                usr_data.image = profile_image_url+get_result.image;
+                            } else {
+                                usr_data.image = profile_image_url + get_result.image;
                             }
-                            
-                        }else{
-                            usr_data.image = live_url+'uploads/no-user.png';
+
+                        } else {
+                            usr_data.image = live_url + 'uploads/no-user.png';
                         }
                         //usr_data.image = live_url+'uploads/no-user.png';
                         usr_result.auth_token = auth_token;
                         usr_result.device_token = device_token;
-                        usr_result.save(function(updt_err,updt_result){
-                            if(updt_err){
+                        usr_result.save(function(updt_err, updt_result) {
+                            if (updt_err) {
                                 res.send(updt_err);
-                            }else{
+                            } else {
                                 response.status = "success";
                                 response.message = "Logged in successfully!";
                                 response.auth_token = auth_token;
@@ -128,44 +132,45 @@ router.post('/login',function(req,res,next){
                                 res.json(response);
                             }
                         })
-                        
+
                     }
-                }else{
+                } else {
                     response.status = "error";
                     response.message = "User does not exist!";
                     res.json(response);
                 }
             }
         })
-    }if((login_type==3) || (login_type==4)){
+    }
+    if ((login_type == 3) || (login_type == 4)) {
         var social_id = req.body.social_id;
         var username = req.body.name;
         var image = req.body.image;
-        user.findOne({'_login_type':login_type,'social_id':social_id},function(usr_err,usr_result){
-            if(usr_err){
+        user.findOne({ '_login_type': login_type, 'social_id': social_id }, function(usr_err, usr_result) {
+            if (usr_err) {
                 res.send(usr_err);
-            }else{
-                if(usr_result){
+            } else {
+                if (usr_result) {
                     var getTime = new Date().getTime();
-                    var auth_token = usr_result._id+getTime;
+                    var auth_token = usr_result._id + getTime;
                     var usr_data = {};
                     usr_data.username = usr_result.name;
-                    if(usr_result.image){
-                        if(url_regexp.test(usr_result.image)){
+                    if (usr_result.image) {
+                        if (url_regexp.test(usr_result.image)) {
                             usr_data.image = usr_result.image;
-                        }else{
-                            usr_data.image = profile_image_url+usr_result.image;
+                        } else {
+                            usr_data.image = profile_image_url + usr_result.image;
                         }
-                        
-                    }else{
-                        usr_data.image = live_url+'uploads/no-user.png';
+
+                    } else {
+                        usr_data.image = live_url + 'uploads/no-user.png';
                     }
                     usr_result.auth_token = auth_token;
                     usr_result.device_token = device_token;
-                    usr_result.save(function(updt_err,updt_result){
-                        if(updt_err){
+                    usr_result.save(function(updt_err, updt_result) {
+                        if (updt_err) {
                             res.send(updt_err);
-                        }else{
+                        } else {
                             response.status = "success";
                             response.message = "Logged in successfully!";
                             response.auth_token = auth_token;
@@ -173,7 +178,7 @@ router.post('/login',function(req,res,next){
                             res.json(response);
                         }
                     })
-                }else{
+                } else {
 
                     var new_usr = new user();
                     new_usr._login_type = login_type;
@@ -181,39 +186,39 @@ router.post('/login',function(req,res,next){
                     new_usr.name = username;
                     new_usr.image = image;
                     //res.send("New Entry");
-                    new_usr.save(function(insert_err,insert_result){
+                    new_usr.save(function(insert_err, insert_result) {
                         //res.send(insert_err);
-                        if(insert_err){
+                        if (insert_err) {
                             res.send(insert_err);
-                        }else{
-                            
-                            
-                            user.findOne({'_id':insert_result._id},function(get_err,get_result){
-                                if(get_err){
+                        } else {
+
+
+                            user.findOne({ '_id': insert_result._id }, function(get_err, get_result) {
+                                if (get_err) {
                                     res.send(get_err);
-                                }else{
+                                } else {
                                     //res.send(get_result);
                                     var usr_data = {};
                                     usr_data.username = get_result.name;
-                                    if(get_result.image){
-                                        if(url_regexp.test(get_result.image)){
+                                    if (get_result.image) {
+                                        if (url_regexp.test(get_result.image)) {
                                             usr_data.image = get_result.image;
-                                        }else{
-                                            usr_data.image = profile_image_url+get_result.image;
+                                        } else {
+                                            usr_data.image = profile_image_url + get_result.image;
                                         }
-                                        
-                                    }else{
-                                        usr_data.image = live_url+'uploads/no-user.png';
+
+                                    } else {
+                                        usr_data.image = live_url + 'uploads/no-user.png';
                                     }
                                     var getTime = new Date().getTime();
-                                    var new_auth_token = get_result._id+getTime;
+                                    var new_auth_token = get_result._id + getTime;
                                     get_result.auth_token = new_auth_token;
                                     get_result.device_token = device_token;
                                     //res.send(usr_result);
-                                    get_result.save(function(updt_err,updt_result){
-                                        if(updt_err){
+                                    get_result.save(function(updt_err, updt_result) {
+                                        if (updt_err) {
                                             res.send(updt_err);
-                                        }else{
+                                        } else {
                                             response.status = "success";
                                             response.message = "Logged in successfully!";
                                             response.auth_token = new_auth_token;
@@ -232,75 +237,75 @@ router.post('/login',function(req,res,next){
     }
 })
 //----------------------------- Function for logout section ----------------------------------//
-router.post('/logout',function(req,res,next){
+router.post('/logout', function(req, res, next) {
     //console.log("Logout Section");
     var result = {};
     var auth_token = req.body.auth_token;
     //res.send(auth_token);
-    user.findOne({'auth_token':auth_token},function(get_err,get_result){
-        if(get_err){
+    user.findOne({ 'auth_token': auth_token }, function(get_err, get_result) {
+        if (get_err) {
             res.send(get_err);
-        }else{
-            if(get_result){
+        } else {
+            if (get_result) {
                 get_result.auth_token = "";
                 get_result.device_token = "";
-                get_result.save(function(updt_err,updt_result){
-                    if(updt_err){
+                get_result.save(function(updt_err, updt_result) {
+                    if (updt_err) {
                         res.send(updt_err);
-                    }else{
+                    } else {
                         result.status = "success";
                         result.message = "Logged out successfully!";
                         res.json(result);
                     }
                 })
-            }else{
+            } else {
                 result.status = "error";
                 result.message = "User not exists";
                 res.json(result);
             }
-            
+
         }
     })
 });
 
 //--------------------------- Function to get the profile details ----------------------------//
-router.post('/getProfile',function(req,res,next){
+router.post('/getProfile', function(req, res, next) {
     //res.send(req.headers);
     var auth_token = req.body.auth_token;
-    user.findOne({'auth_token':auth_token},function(get_err,get_result){
-        if(get_err){
+    user.findOne({ 'auth_token': auth_token }, function(get_err, get_result) {
+        if (get_err) {
             res.send(get_err);
-        }else{
+        } else {
             var usr_array = [];
             var result = {};
-            if(get_result){
+            if (get_result) {
                 var usr_obj = {};
                 usr_obj.username = get_result.name;
                 usr_obj.email = get_result.email;
-                if(get_result.image){
-                    if(url_regexp.test(get_result.image)){
+                if (get_result.image) {
+                    if (url_regexp.test(get_result.image)) {
                         usr_obj.image = get_result.image;
-                    }else{
-                        usr_obj.image = live_url+'uploads/'+get_result.image;
+                    } else {
+                        usr_obj.image = live_url + 'uploads/' + get_result.image;
                     }
-                }else{
-                    usr_obj.image = live_url+'uploads/no-user.png';
+                } else {
+                    usr_obj.image = live_url + 'uploads/no-user.png';
                 }
                 usr_array.push(usr_obj);
-                result.status="success";
-                result.message="Profile details fetch successfully";
-                result.result=usr_array;
-            }else{
-                result.status="error";
-                result.message="User does not find";
-                result.result=usr_array;
+                result.status = "success";
+                result.message = "Profile details fetch successfully";
+                result.result = usr_array;
+            } else {
+                result.status = "error";
+                result.message = "User does not find";
+                result.result = usr_array;
             }
             res.json(result);
         }
     })
 });
 //--------------------------- Function to update the profile details ---------------------------------//
-router.post('/updateProfile',function(req,res,next){
+router.post('/updateProfile', function(req, res, next) {
     var auth_token = req.body.auth_token;
     var username = req.body.username;
     var email = req.body.email;
@@ -335,31 +340,33 @@ router.post('/updateProfile',function(req,res,next){
     //         }
     //     }
     // });
-    var return_user = {}; 
-    if(auth_token!=''){
-        if(username!=''){
-            user.findOne({'name':username,'auth_token': { $ne: auth_token }},function(exist_err,exist_result){
-                if(exist_err){
+    var return_user = {};
+    if (auth_token != '') {
+        if (username != '') {
+            user.findOne({ 'name': username, 'auth_token': { $ne: auth_token } }, function(exist_err, exist_result) {
+                if (exist_err) {
                     res.send(exist_err);
-                }else{
+                } else {
                     //res.send(exist_result);
-                    if(exist_result){
-                        result.status="error";
+                    if (exist_result) {
+                        result.status = "error";
                         result.message = "This username allready exists";
                         res.json(result);
-                    }else{
-                        user.findOne({'auth_token':auth_token},function(usr_err,usr_result){
-                            if(usr_err){
+                    } else {
+                        user.findOne({ 'auth_token': auth_token }, function(usr_err, usr_result) {
+                            if (usr_err) {
                                 res.send(usr_err);
-                            }else{
-                                if(usr_result){
-                                    if(username!=''){
+                            } else {
+                                if (usr_result) {
+                                    if (username != '') {
                                         usr_result.name = username;
                                         return_user.username = username;
-                                    }if(email!=''){
+                                    }
+                                    if (email != '') {
                                         usr_result.email = email;
                                         return_user.email = email;
-                                    }if(password!=''){
+                                    }
+                                    if (password != '') {
                                         usr_result.password = usr_result.encryptPassword(password);
                                     }
                                     // if(img!=''){
@@ -391,12 +398,12 @@ router.post('/updateProfile',function(req,res,next){
                                     //     usr_result.image = imageName;
                                     //     return_user.image = live_url+'uploads/'+imageName;
                                     // }
-                                    usr_result.save(function(updt_err,updt_result){
-                                        if(updt_err){
+                                    usr_result.save(function(updt_err, updt_result) {
+                                        if (updt_err) {
                                             res.send(updt_err);
-                                        }else{
-                                            result.status="success";
-                                            result.message="profile updated successfully!";
+                                        } else {
+                                            result.status = "success";
+                                            result.message = "profile updated successfully!";
                                             result.auth_token = auth_token;
                                             result.data = return_user;
                                             res.json(result);
@@ -404,7 +411,7 @@ router.post('/updateProfile',function(req,res,next){
                                             //     if(get_error){
                                             //         res.send(get_error);
                                             //     }else{
-                                                    
+
                                             //         if(get_usr.image){
                                             //             if(url_regexp.test(get_usr.image)){
                                             //                 return_user.image = get_usr.image;
@@ -423,8 +430,8 @@ router.post('/updateProfile',function(req,res,next){
                                             // });
                                         }
                                     });
-                                }else{
-                                    result.status="error";
+                                } else {
+                                    result.status = "error";
                                     result.message = "User does not exists";
                                     res.json(result);
                                 }
@@ -433,16 +440,17 @@ router.post('/updateProfile',function(req,res,next){
                     }
                 }
             });
-        }else{
-            user.findOne({'auth_token':auth_token},function(usr_err,usr_result){
-                if(usr_err){
+        } else {
+            user.findOne({ 'auth_token': auth_token }, function(usr_err, usr_result) {
+                if (usr_err) {
                     res.send(usr_err);
-                }else{
-                    if(usr_result){
-                        if(email!=''){
+                } else {
+                    if (usr_result) {
+                        if (email != '') {
                             usr_result.email = email;
                             return_user.email = email;
-                        }if(password!=''){
+                        }
+                        if (password != '') {
                             usr_result.password = usr_result.encryptPassword(password);
                         }
                         //  if(img!=''){
@@ -474,12 +482,12 @@ router.post('/updateProfile',function(req,res,next){
                         //     usr_result.image = imageName;
                         //     return_user.image = live_url+'uploads/'+imageName;
                         // }
-                        usr_result.save(function(updt_err,updt_result){
-                            if(updt_err){
+                        usr_result.save(function(updt_err, updt_result) {
+                            if (updt_err) {
                                 res.send(updt_err);
-                            }else{
-                                result.status="success";
-                                result.message="profile updated successfully!";
+                            } else {
+                                result.status = "success";
+                                result.message = "profile updated successfully!";
                                 result.auth_token = auth_token;
                                 result.data = return_user;
                                 res.json(result);
@@ -504,127 +512,127 @@ router.post('/updateProfile',function(req,res,next){
                                 //         res.json(result);
                                 //     }
                                 // })
-                                
+
                             }
                         })
-                    }else{
-                        result.status="error";
+                    } else {
+                        result.status = "error";
                         result.message = "User does not exists";
                         res.json(result);
                     }
                 }
             })
         }
-        
-        
-    }else{
-        result.status="error";
+
+
+    } else {
+        result.status = "error";
         result.message = "Authorize token is required.";
         res.json(result);
     }
-    
+
 });
 //--------------------------- Function to send the Email for forgot password -----------------------------//
-router.post('/forgotPasswordEmail',function(req,res,next){
+router.post('/forgotPasswordEmail', function(req, res, next) {
     var email = req.body.email;
     var random_code = randomString(10, '#aA');
-    user.findOne({'email':email},function(get_err,get_result){
-        if(get_err){
+    user.findOne({ 'email': email }, function(get_err, get_result) {
+        if (get_err) {
             res.send(get_err);
-        }else{
+        } else {
             var result = {};
-            if(get_result){
-                if(get_result.email!=''){
+            if (get_result) {
+                if (get_result.email != '') {
                     get_result.verification_code = random_code;
-                    get_result.save(function(updt_err,updt_result){
-                        if(updt_err){
+                    get_result.save(function(updt_err, updt_result) {
+                        if (updt_err) {
                             res.send(updt_err);
-                        }else{
+                        } else {
                             var email_address = get_result.email;
-                            var pwd_reset_url = live_url+'password_reset/'+get_result._id;
-                            var htmltemplate = '<p>Hello '+get_result.name+'</p><p>You have successfully verified your email address. Your verification code is given below:</p><p>Verifcation Code : <b>'+random_code+'</b></p>';
+                            var pwd_reset_url = live_url + 'password_reset/' + get_result._id;
+                            var htmltemplate = '<p>Hello ' + get_result.name + '</p><p>You have successfully verified your email address. Your verification code is given below:</p><p>Verifcation Code : <b>' + random_code + '</b></p>';
                             var mailOptions = {
-                              from: 'testdevloper007@gmail.com',
-                              to: email_address,
-                              subject: 'Password recovery email',
-                              html: htmltemplate
+                                from: 'testdevloper007@gmail.com',
+                                to: email_address,
+                                subject: 'Password recovery email',
+                                html: htmltemplate
                             };
 
-                            transporter.sendMail(mailOptions, function(error, info){
-                              if (error) {
-                                result.status="error";
-                                result.message="Email does not send due to some problem, Please try again after sometime.";
-                                res.send(result);
-                              } else {
-                                result.status="success";
-                                result.message="A verification email has been sent to your email address. Please check it.";
-                                res.send(result);
-                              }
+                            transporter.sendMail(mailOptions, function(error, info) {
+                                if (error) {
+                                    result.status = "error";
+                                    result.message = "Email does not send due to some problem, Please try again after sometime.";
+                                    res.send(result);
+                                } else {
+                                    result.status = "success";
+                                    result.message = "A verification email has been sent to your email address. Please check it.";
+                                    res.send(result);
+                                }
                             });
                         }
                     })
                 }
-                
-            }else{
-                result.status="error";
-                result.message="Email does not exists!";
+
+            } else {
+                result.status = "error";
+                result.message = "Email does not exists!";
                 res.send(result);
             }
-            
+
         }
     })
 });
 //-------------------------- Function to check the verification code ---------------------------------//
-router.post('/checkVerificationCode',function(req,res,next){
+router.post('/checkVerificationCode', function(req, res, next) {
     var result = {};
     var verification_code = req.body.verification_code;
-    user.findOne({'verification_code':verification_code},function(get_err,get_result){
-        if(get_err){
+    user.findOne({ 'verification_code': verification_code }, function(get_err, get_result) {
+        if (get_err) {
             res.send(get_err);
-        }else{
-            if(get_result){
+        } else {
+            if (get_result) {
                 var user_id = get_result._id;
                 get_result.verification_code = "";
-                get_result.save(function(updt_err,updt_result){
-                    if(updt_err){
+                get_result.save(function(updt_err, updt_result) {
+                    if (updt_err) {
                         res.send(updt_err);
-                    }else{
+                    } else {
                         result.status = "message";
                         result.message = "Your verification code has been successfully verified. Now please reset your password.";
                         result.user_id = user_id;
                         res.json(result);
                     }
                 })
-            }else{
+            } else {
                 result.status = "error";
                 result.message = "You have entered wrong verification code.";
                 res.json(result);
             }
-            
+
         }
     })
 });
 //---------------------- Function to reset the password -----------------------------//
-router.post('/resetPassword',function(req,res,next){
+router.post('/resetPassword', function(req, res, next) {
     var result = {};
     var password = req.body.password;
     var user_id = req.body.user_id;
-    user.findOne({'_id':user_id},function(get_err,get_result){
-        if(get_err){
+    user.findOne({ '_id': user_id }, function(get_err, get_result) {
+        if (get_err) {
             res.send(get_err);
-        }else{
-            if(get_result){
+        } else {
+            if (get_result) {
                 get_result.password = get_result.encryptPassword(password);
-                get_result.save(function(updt_err,updt_result){
-                    if(updt_err){
+                get_result.save(function(updt_err, updt_result) {
+                    if (updt_err) {
                         res.send(updt_err);
-                    }else{
+                    } else {
                         result.status = "success";
                         result.message = "Password update successfully";
                         res.json(result);
                     }
                 })
-            }else{
+            } else {
                 result.status = "error";
                 result.message = "User not found with this id";
                 res.json(result);
@@ -633,52 +641,52 @@ router.post('/resetPassword',function(req,res,next){
     });
 });
 //---------------------- Function to get the random words ----------------------------------//
-router.post('/gameWord',function(req,res,next){
+router.post('/gameWord', function(req, res, next) {
     var language_name = req.body.language_name;
-    game_master.findOne({},function(get_err,get_result){
-        if(get_err){
+    game_master.findOne({}, function(get_err, get_result) {
+        if (get_err) {
             res.send(get_err);
-        }else{
+        } else {
             //res.send(get_result);
             var response = {};
             var language_code = get_result.language_code;
             var total_charecters = get_result.total_characters;
             var language_id = language_code.indexOf(language_name);
-            if(language_id<0){
-                response.status="error";
+            if (language_id < 0) {
+                response.status = "error";
                 response.message = "Invalid language code";
-            }else{
+            } else {
                 var get_language_array = total_charecters[language_id];
                 get_language_array = shuffle(get_language_array);
                 var new_arr = [];
-                for(var i=0;i<7;i++){
+                for (var i = 0; i < 7; i++) {
                     new_arr.push(get_language_array[i]);
                 }
-                response.status="success";
+                response.status = "success";
                 response.message = "Successfully get the words";
                 response.words = new_arr;
             }
-            
+
             res.json(response);
         }
     })
 });
-router.post('/checkWord',function(req,res,next){
+router.post('/checkWord', function(req, res, next) {
     var language_code = req.body.language_code;
     var word = req.body.word;
     //res.send("TEST");
-    dictionary.findOne({'language_code':language_code},function(get_err,get_result){
-        
-        if(get_err){
+    dictionary.findOne({ 'language_code': language_code }, function(get_err, get_result) {
+
+        if (get_err) {
             res.send(get_err);
-        }else{
+        } else {
             //console.log(get_result);
             var result = {};
             var checkWord = get_result.dictionary.indexOf(word);
-            if(checkWord<0){
+            if (checkWord < 0) {
                 result.status = "error";
                 result.message = "Word does not match with dictionary";
-            }else{
+            } else {
                 result.status = "success";
                 result.message = "Successfully match with dictionary";
             }
@@ -687,26 +695,26 @@ router.post('/checkWord',function(req,res,next){
     })
 });
 //----------------------- Function to send the challenge by push notification --------------------------//
-router.post('/send_challenge',function(req,res,next){
+router.post('/send_challenge', function(req, res, next) {
     var opponent_id = req.body.opponent_id;
     var auth_token = req.body.auth_token;
     var language_name = req.body.language_name;
     var board_layout = req.body.board_layout;
     var game_mode = req.body.game_mode;
     var waiting_time = req.body.waiting_time;
-    user.findOne({'auth_token':auth_token},function(usr_err,usr_result){
-        if(usr_err){
+    user.findOne({ 'auth_token': auth_token }, function(usr_err, usr_result) {
+        if (usr_err) {
             res.send(usr_err);
-        }else{
-            if(usr_result){
+        } else {
+            if (usr_result) {
                 var getUsrName = usr_result.name;
                 var getUsrId = usr_result._id;
-                user.findOne({'_id':opponent_id},function(opponent_err,opponent_result){
-                    if(opponent_err){
+                user.findOne({ '_id': opponent_id }, function(opponent_err, opponent_result) {
+                    if (opponent_err) {
                         res.send(opponent_err);
-                    }else{
-                        if(opponent_result){
-                            if(opponent_result.device_token!=''){
+                    } else {
+                        if (opponent_result) {
+                            if (opponent_result.device_token != '') {
                                 var deviceToken = opponent_result.device_token;
                                 //var user_details = new user();
                                 var challenge_details = new challenge();
@@ -716,29 +724,29 @@ router.post('/send_challenge',function(req,res,next){
                                 challenge_details.board_layout = board_layout;
                                 challenge_details.game_mode = opponent_result.game_mode;
                                 challenge_details.waiting_time = waiting_time;
-                                challenge_details.save(function(challenge_err,challenge_result){
-                                    if(challenge_err){
+                                challenge_details.save(function(challenge_err, challenge_result) {
+                                    if (challenge_err) {
                                         res.send(challenge_err);
-                                    }else{
+                                    } else {
                                         var game_challenge_id = challenge_result._id;
                                         //console.log(challenge_id);
                                         var FCM = require('fcm-node');
                                         var fcm = new FCM("AAAAVQ4bC4A:APA91bGprg3V-T-Qfbf_SfosJSyzGv4hH1UqrOpAZz6fr_onDEsoIaLBkCOKTz231ziXVmZRMJnE5le7T_-izX7c5o8SnHatF2hppfZUTcfkeohAk9WGIlxQtRFOj1bJ3YS3cxkoyfPs")
 
-                                        var notification_body = getUsrName+" send you a challenge for SmartFeud. Please accept the challenge.";
-                                        var message = { 
+                                        var notification_body = getUsrName + " send you a challenge for SmartFeud. Please accept the challenge.";
+                                        var message = {
                                             to: deviceToken,
                                             notification: {
-                                                title: 'Smart Feud', 
-                                                body: notification_body 
+                                                title: 'Smart Feud',
+                                                body: notification_body
                                             },
-                                            data: {  //you can send only notification or only data(or include both) 
+                                            data: { //you can send only notification or only data(or include both) 
                                                 message: 'Message - 3',
-                                                challenge_id : game_challenge_id
+                                                challenge_id: game_challenge_id
                                             }
                                         }
-                                        
-                                        fcm.send(message, function(err, response){
+
+                                        fcm.send(message, function(err, response) {
                                             if (err) {
                                                 console.log(err);
                                                 var result = {};
@@ -756,13 +764,13 @@ router.post('/send_challenge',function(req,res,next){
                                         })
                                     }
                                 })
-                            }else{
+                            } else {
                                 var result = {};
                                 result.status = "error";
                                 result.message = "Deview ID is required";
                                 res.send(result);
                             }
-                        }else{
+                        } else {
                             var result = {};
                             result.status = "error";
                             result.message = "Sender details not found";
@@ -770,7 +778,7 @@ router.post('/send_challenge',function(req,res,next){
                         }
                     }
                 })
-            }else{
+            } else {
                 var result = {};
                 result.status = "error";
                 result.message = "User not exists";
@@ -792,33 +800,33 @@ router.post('/send_challenge',function(req,res,next){
     // res.send(result);
 
 
-    
+
     //res.send("THIS IS SAMPLE");
 });
 //----------------------- Function to add the friend -----------------------------------//
-router.post('/add_friend',function(req,res,next){
+router.post('/add_friend', function(req, res, next) {
     var auth_token = req.body.auth_token;
     var opponent_id = req.body.opponent_id;
-    user.findOne({'auth_token':auth_token},function(usr_err,usr_result){
-        if(usr_err){
+    user.findOne({ 'auth_token': auth_token }, function(usr_err, usr_result) {
+        if (usr_err) {
             res.send(usr_err);
-        }else{
-            if(usr_result){
+        } else {
+            if (usr_result) {
                 var userId = usr_result._id;
                 var friendDetails = new friend();
                 friendDetails.user_id = userId;
                 friendDetails.friend_id = opponent_id;
-                friendDetails.save(function(save_err,save_result){
-                    if(save_err){
+                friendDetails.save(function(save_err, save_result) {
+                    if (save_err) {
                         res.send(save_err);
-                    }else{
+                    } else {
                         var result = {};
                         result.status = "success";
                         result.message = "Friend Added Succesfully";
                         res.send(result);
                     }
                 })
-            }else{
+            } else {
                 var result = {};
                 result.status = "error";
                 result.message = "This user does not exists";
@@ -828,29 +836,29 @@ router.post('/add_friend',function(req,res,next){
     })
 });
 //---------------------- Function to block the user ----------------------------------//
-router.post('/block_friend',function(req,res,next){
+router.post('/block_friend', function(req, res, next) {
     var auth_token = req.body.auth_token;
     var opponent_id = req.body.opponent_id;
-    user.findOne({'auth_token':auth_token},function(usr_err,usr_result){
-        if(usr_err){
+    user.findOne({ 'auth_token': auth_token }, function(usr_err, usr_result) {
+        if (usr_err) {
             res.send(usr_err);
-        }else{
-            if(usr_result){
+        } else {
+            if (usr_result) {
                 var userId = usr_result._id;
                 var blockUserDetails = new block_user();
                 blockUserDetails.user_id = userId;
                 blockUserDetails.block_id = opponent_id;
-                blockUserDetails.save(function(save_err,save_result){
-                    if(save_err){
+                blockUserDetails.save(function(save_err, save_result) {
+                    if (save_err) {
                         res.send(save_err);
-                    }else{
+                    } else {
                         var result = {};
                         result.status = "success";
                         result.message = "User has been blocked succesfully";
                         res.send(result);
                     }
                 })
-            }else{
+            } else {
                 var result = {};
                 result.status = "error";
                 result.message = "This user does not exists";
@@ -860,34 +868,34 @@ router.post('/block_friend',function(req,res,next){
     })
 });
 //----------------------- Function to get the block user list -------------------------------//
-router.post('/block_list',function(req,res,next){
+router.post('/block_list', function(req, res, next) {
     var auth_token = req.body.auth_token;
-    user.findOne({'auth_token':auth_token},function(usr_err,usr_result){
-        if(usr_err){
+    user.findOne({ 'auth_token': auth_token }, function(usr_err, usr_result) {
+        if (usr_err) {
             res.send(usr_err);
-        }else{
-            if(usr_result){
+        } else {
+            if (usr_result) {
                 console.log(usr_result);
-                block_user.find({'user_id':usr_result._id}).populate('block_id').exec(function(block_err,block_result){
-                    if(block_err){
+                block_user.find({ 'user_id': usr_result._id }).populate('block_id').exec(function(block_err, block_result) {
+                    if (block_err) {
                         res.send(block_err);
-                    }else{
+                    } else {
                         //res.send(block_result);
                         var block_result_arr = [];
-                        if(block_result.length>0){
-                            for(var block_counter in block_result){
+                        if (block_result.length > 0) {
+                            for (var block_counter in block_result) {
                                 var usr_obj = {};
                                 var get_result = block_result[block_counter].block_id;
                                 usr_obj.user_id = get_result._id;
                                 usr_obj.user_name = get_result.name;
-                                if(get_result.image){
-                                    if(url_regexp.test(get_result.image)){
+                                if (get_result.image) {
+                                    if (url_regexp.test(get_result.image)) {
                                         usr_obj.image = get_result.image;
-                                    }else{
-                                        usr_obj.image = live_url+'uploads/'+get_result.image;
+                                    } else {
+                                        usr_obj.image = live_url + 'uploads/' + get_result.image;
                                     }
-                                }else{
-                                    usr_obj.image = live_url+'uploads/no-user.png';
+                                } else {
+                                    usr_obj.image = live_url + 'uploads/no-user.png';
                                 }
                                 block_result_arr.push(usr_obj);
                             }
@@ -899,7 +907,7 @@ router.post('/block_list',function(req,res,next){
                         res.send(result);
                     }
                 })
-            }else{
+            } else {
                 var result = {};
                 result.status = "error";
                 result.message = "This user does not exists";
@@ -909,33 +917,33 @@ router.post('/block_list',function(req,res,next){
     })
 });
 //------------------------ Function to get the unblock user list -----------------------------//
-router.post('/unblock_friend',function(req,res,next){
+router.post('/unblock_friend', function(req, res, next) {
     var auth_token = req.body.auth_token;
     var blocked_user_id = req.body.blocked_user_id;
-    user.findOne({'auth_token':auth_token},function(usr_err,usr_result){
-        if(usr_err){
+    user.findOne({ 'auth_token': auth_token }, function(usr_err, usr_result) {
+        if (usr_err) {
             res.send(usr_err);
-        }else{
-            if(usr_result){
+        } else {
+            if (usr_result) {
                 var user_id = usr_result._id;
-                block_user.findOne({'user_id':user_id,'block_id':blocked_user_id},function(block_usr_err,block_usr_result){
-                    if(block_usr_err){
+                block_user.findOne({ 'user_id': user_id, 'block_id': blocked_user_id }, function(block_usr_err, block_usr_result) {
+                    if (block_usr_err) {
                         res.send(block_usr_err);
-                    }else{
-                        block_user.remove({'_id':block_usr_result._id},function(delete_block_err,delete_block_result){
-                            if(delete_block_err){
+                    } else {
+                        block_user.remove({ '_id': block_usr_result._id }, function(delete_block_err, delete_block_result) {
+                            if (delete_block_err) {
                                 res.send(delete_block_err);
-                            }else{
+                            } else {
                                 var result = {};
                                 result.status = "success";
                                 result.message = "User has been unblcoked succesfully";
                                 res.send(result);
                             }
                         })
-                        
+
                     }
                 })
-            }else{
+            } else {
                 var result = {};
                 result.status = "error";
                 result.message = "This user does not exists";
@@ -944,127 +952,249 @@ router.post('/unblock_friend',function(req,res,next){
         }
     });
 });
-router.get('/uploadTSV',function(req,res,next){
-    
-    
-  res.render('uploadTSV', { title: 'Express' });
+router.get('/uploadTSV', function(req, res, next) {
+
+
+    res.render('uploadTSV', { title: 'Express' });
 
 });
-router.post('/uploadTSV',function(req,res,next){
+router.post('/uploadTSV', function(req, res, next) {
     // var tsv = req.body.number;
     // var lines=tsv.split("\n");
 
     // var result = [];
- 
+
     // var headers=lines[0].split("\t");
- 
+
     // for(var i=1;i<lines.length;i++){
     //     console.log("details");
     //     var obj = {};
     //     var currentline=lines[i].split("\t");
-     
+
     //     for(var j=0;j<headers.length;j++){
     //           obj[headers[j]] = currentline[j];
     //     }
-     
+
     //     result.push(obj);
-     
+
     // }
     // res.send(result);
     var form = new multiparty.Form();
-    form.parse(req, function (err, fields,files) {
+    form.parse(req, function(err, fields, files) {
         var tempPath = files.upload_csv[0].path;
         var imageName = new Date().getTime() + path.extname(files.upload_csv[0].originalFilename);
-        var targetPath = './uploads/'+imageName;
+        var targetPath = './uploads/' + imageName;
         var dataArray = [];
         fs.readFile(tempPath, function(err, data) {
-            
-            fs.writeFile(targetPath,data,function(err,data){
-                if(err){
-                  console.log(err);
-                  res.send(err);
-                }else{
+
+            fs.writeFile(targetPath, data, function(err, data) {
+                if (err) {
+                    console.log(err);
+                    res.send(err);
+                } else {
                     var stream = fs.createReadStream(targetPath);
-                      csv.fromStream(stream, {headers : true})
-                       .validate(function(data, next){
-                           console.log(data);
-                       })
-                       .on("data", function(data){
-                           console.log(data);
-                       })
-                       .on("end", function(){
-                           console.log("done");
-                           res.send("TEST");
-                           //fs.unlink(targetPath);
-                           
-                       });
+                    csv.fromStream(stream, { headers: true })
+                        .validate(function(data, next) {
+                            console.log(data);
+                        })
+                        .on("data", function(data) {
+                            console.log(data);
+                        })
+                        .on("end", function() {
+                            console.log("done");
+                            res.send("TEST");
+                            //fs.unlink(targetPath);
+
+                        });
                 }
             });
         });
     });
 })
 //-------------- check dummy email send ----------------------------//
-router.get('/testEmail',function(req,res,next){
+router.get('/testEmail', function(req, res, next) {
     var testHTML = '<h4>Hello Admin,</h4><br/><p>Your password hes been successfully reset. To reset your password please click on the below link</p><p><a href="http://google.com">Click here</a></p>';
     var mailOptions = {
-      from: 'testdevloper007@gmail.com',
-      to: 'jayatish@digitalaptech.com',
-      subject: 'Sending Email using Node.js',
-      html: testHTML
+        from: 'testdevloper007@gmail.com',
+        to: 'jayatish@digitalaptech.com',
+        subject: 'Sending Email using Node.js',
+        html: testHTML
     };
 
-    transporter.sendMail(mailOptions, function(error, info){
-      if (error) {
-        console.log(error);
-        res.send(error);
-      } else {
-        console.log('Email sent: ' + info.response);
-        res.send("Successfullu send email");
-      }
+    transporter.sendMail(mailOptions, function(error, info) {
+        if (error) {
+            console.log(error);
+            res.send(error);
+        } else {
+            console.log('Email sent: ' + info.response);
+            res.send("Successfullu send email");
+        }
     });
 })
-router.get('/userList',function(req,res,next){
-      
+router.get('/userList', function(req, res, next) {
+
     console.log("TEST JAYATISH");
-    user.find({},function(err,result){
-    	console.log("GET DETAILS");
-        if(err){
+    user.find({}, function(err, result) {
+        console.log("GET DETAILS");
+        if (err) {
             res.send(err);
-        }else{
+        } else {
             res.json(result);
         }
     })
 });
-router.get('/userDetails',function(req,res,next){
-	res.send("Successfully Worked");
-});
-router.post('/updtprofileimage',function(req,res,next){
+router.post('/insertGame', function(req, res, next) {
+    var userId = req.body.sender_id;
+    var opponentId = req.body.opponent_id;
+    var myArray = opponentId.split(",");
+    var insertArray = [];
+    var finalID = [];
+    var response = [];
+    async_node.map(myArray, function(singleId, callback) {
+        test_game.findOne({ 'sender_id': userId }).elemMatch("receive_id", { "opponent_id": singleId, "status": { $ne: 2 } }).exec(function(get_err, get_result) {
+            if (get_err) {
+                res.send(get_err);
+            } else {
+                if (get_result) {
+                    var err_response = {};
+                    err_response.status = 'error';
+                    err_response.message = 'You have allready send the notification to this friend.';
+                    response.push(err_response);
+                } else {
+                    finalID.push(singleId);
+
+                }
+                callback();
+            }
+        });
+    }, function() {
+        var result = {};
+        if (response.length > 0) {
+            result.status = 'error';
+            result.message = 'You have allready send the notification to this friend.';
+            res.send(result);
+        } else {
+            if (finalID.length > 0) {
+                for (var new_counter = 0; new_counter < finalID.length; new_counter++) {
+                    var individualArray = {};
+                    individualArray.opponent_id = finalID[new_counter];
+                    individualArray.status = 0;
+                    insertArray.push(individualArray);
+                }
+                var insert_test_game = new test_game();
+                insert_test_game.sender_id = userId;
+                insert_test_game.receive_id = insertArray;
+                insert_test_game.save(function(err_game, result_game) {
+                    if (err_game) {
+                        res.send(err_game);
+                    } else {
+                        result.status = 'success';
+                        result.message = 'Game room successfully created.';
+                        res.send(result);
+                    }
+                })
+            } else {
+                result.status = 'success';
+                result.message = 'Game room allready created.';
+                res.send(result);
+            }
+        }
+    });
+    // test_game.findOne({ 'sender_id': userId }).elemMatch("receive_id", { "opponent_id": opponentId, "status": { $ne: 2 } }).exec(function(get_err, get_result) {
+    //     if (get_err) {
+    //         res.send(get_err);
+    //     } else {
+    //         //res.send(get_result);
+    //         if (get_result) {
+    //             var result = {};
+    //             result.status = 'error';
+    //             result.message = 'You have allready send the notification to this friend.';
+    //             res.send(result);
+    //         } else {
+
+    //             var get_receive = get_result.receive_id;
+    //             get_receive.push(insertArray);
+    //             get_result.receive_id = get_receive;
+    //             get_result.save(function(updt_err, updt_result) {
+    //                 if (updt_err) {
+    //                     res.send(updt_err);
+    //                 } else {
+    //                     var result = {};
+    //                     result.status = 'success';
+    //                     result.message = 'Successfully updated';
+    //                     res.json(result);
+    //                 }
+    //             })
+    //         }
+    //     }
+    // })
+
+
+    // test_game.findOne({ 'sender_id': userId }, function(get_err, get_result) {
+    //     if (get_err) {
+    //         res.send(get_err);
+    //     } else {
+    //         if (get_result) {
+    //             var get_receive = get_result.receive_id;
+    //             get_receive.push(insertArray);
+    //             get_result.receive_id = get_receive;
+    //             get_result.save(function(updt_err, updt_result) {
+    //                 if (updt_err) {
+    //                     res.send(updt_err);
+    //                 } else {
+    //                     var result = {};
+    //                     result.status = 'success';
+    //                     result.message = 'Successfully updated';
+    //                     res.json(result);
+    //                 }
+    //             })
+    //         } else {
+    //             var insert_test_game = new test_game();
+    //             insert_test_game.sender_id = userId;
+    //             insert_test_game.receive_id = insertArray;
+    //             //res.send(insertArray);
+    //             insert_test_game.save(function(save_err, save_result) {
+    //                 if (save_err) {
+    //                     res.send(save_err);
+    //                 } else {
+    //                     var result = {};
+    //                     result.status = 'success';
+    //                     result.message = 'Successfully inserted';
+    //                     res.json(result);
+    //                 }
+    //             })
+    //         }
+    //     }
+    // })
+
+})
+router.post('/updtprofileimage', function(req, res, next) {
     var auth_token = req.body.auth_token;
     var profileImage = req.body.uploaded_image;
     console.log(profileImage);
-    user.findOne({'auth_token':auth_token},function(exist_err,exist_result){
-        if(exist_err){
+    user.findOne({ 'auth_token': auth_token }, function(exist_err, exist_result) {
+        if (exist_err) {
             res.send(exist_err);
-        }else{
+        } else {
             console.log(exist_result);
             exist_result.image = profileImage;
-            exist_result.save(function(save_err,save_result){
-                if(save_err){
+            exist_result.save(function(save_err, save_result) {
+                if (save_err) {
                     res.send(save_err);
-                }else{
-                    
+                } else {
+
                     var result = {};
                     result.status = "success";
                     result.message = "Profile image uploaded successfully";
-                    result.profileImage = profile_image_url+profileImage;
+                    result.profileImage = profile_image_url + profileImage;
                     res.json(result);
                 }
             })
         }
     });
 })
-router.post('/getImageDetails',function(req,res,next){
-    
+router.post('/getImageDetails', function(req, res, next) {
+
     // var data = req.body.profileImage;
     // var myBuffer = new Buffer(data.length);
     // for (var i = 0; i < data.length; i++) {
@@ -1078,7 +1208,7 @@ router.post('/getImageDetails',function(req,res,next){
     //         var result = {};
     //         result.status = "error";
     //         result.message = "Not Uploaded yet";
-            
+
     //     } else {
     //         console.log("The file was saved!");
     //         var result = {};
@@ -1094,8 +1224,8 @@ router.post('/getImageDetails',function(req,res,next){
     // form.parse(req, function(err, fields, files) {
 
     //         console.log("=========================>>>",err);
-        
-        
+
+
     //     });
 
 
@@ -1103,7 +1233,7 @@ router.post('/getImageDetails',function(req,res,next){
 
 
 
-// console.log(err,fields,files);
+    // console.log(err,fields,files);
     //   if (err) {
     //     console.log(err);
     //     // return res.json(Utility.output(err, 'ERROR'));
@@ -1126,28 +1256,29 @@ router.post('/getImageDetails',function(req,res,next){
     //     console.log("ext",extension);
     //     res.send('Only image file[*.jpg/*.jpeg/*.png/*.gif] will be accepted');
     //   }
-        
+
     //   }
 
 
 
 
 
-// console.log(req.body);
-    
-//     console.log("=====================>",req.rawBody);
-//     fs.writeFile('abc.wav', req.rawBody, 'binary', function(err){
-//         console.log(err);
-//     if (err) throw err;
-//     });
-//     var result = {};
-//     result.status = "error";
-//     result.message = "Uploaded yet";
-//     res.send(result);
-    
+    // console.log(req.body);
+
+    //     console.log("=====================>",req.rawBody);
+    //     fs.writeFile('abc.wav', req.rawBody, 'binary', function(err){
+    //         console.log(err);
+    //     if (err) throw err;
+    //     });
+    //     var result = {};
+    //     result.status = "error";
+    //     result.message = "Uploaded yet";
+    //     res.send(result);
+
 
 })
 module.exports = router;
+
 function randomString(length, chars) {
     var mask = '';
     if (chars.indexOf('a') > -1) mask += 'abcdefghijklmnopqrstuvwxyz';
@@ -1158,14 +1289,15 @@ function randomString(length, chars) {
     for (var i = length; i > 0; --i) result += mask[Math.round(Math.random() * (mask.length - 1))];
     return result;
 }
-function shuffle(array) {
-  var tmp, current, top = array.length;
-  if(top) while(--top) {
-    current = Math.floor(Math.random() * (top + 1));
-    tmp = array[current];
-    array[current] = array[top];
-    array[top] = tmp;
-  }
-  return array;
-}
 
+function shuffle(array) {
+    var tmp, current, top = array.length;
+    if (top)
+        while (--top) {
+            current = Math.floor(Math.random() * (top + 1));
+            tmp = array[current];
+            array[current] = array[top];
+            array[top] = tmp;
+        }
+    return array;
+}
