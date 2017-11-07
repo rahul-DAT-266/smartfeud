@@ -107,6 +107,7 @@ router.post('/login', function(req, res, next) {
                         var getTime = new Date().getTime();
                         var auth_token = get_result._id + getTime;
                         var usr_data = {};
+                        usr_data.user_id = get_result._id;
                         usr_data.username = get_result.name;
                         usr_data.email = get_result.email;
                         if (get_result.image) {
@@ -156,6 +157,7 @@ router.post('/login', function(req, res, next) {
                     var getTime = new Date().getTime();
                     var auth_token = usr_result._id + getTime;
                     var usr_data = {};
+                    usr_data.user_id = usr_result._id;
                     usr_data.username = usr_result.name;
                     if (usr_result.image) {
                         if (url_regexp.test(usr_result.image)) {
@@ -201,6 +203,7 @@ router.post('/login', function(req, res, next) {
                                 } else {
                                     //res.send(get_result);
                                     var usr_data = {};
+                                    usr_data.user_id = usr_result._id;
                                     usr_data.username = get_result.name;
                                     if (get_result.image) {
                                         if (url_regexp.test(get_result.image)) {
@@ -699,6 +702,8 @@ router.post('/checkWord', function(req, res, next) {
 //----------------------- Function to send the challenge by push notification --------------------------//
 router.post('/send_challenge', function(req, res, next) {
     var opponent_id = req.body.opponent_id;
+    //var opponentString = opponent_id.replace(/['"]+/g, '')
+    //console.log(opponent_id);
     var myArray = opponent_id.split(",");
     var auth_token = req.body.auth_token;
     var language_name = req.body.language_name;
@@ -706,15 +711,18 @@ router.post('/send_challenge', function(req, res, next) {
     var game_mode = req.body.game_mode;
     var waiting_time = req.body.waiting_time;
     var no_of_players = req.body.no_of_players;
+    //res.send(myArray);
     user.findOne({ 'auth_token': auth_token }, function(usr_err, usr_result) {
         if (usr_err) {
             res.send(usr_err);
         } else {
             if (usr_result) {
+                //console.log(usr_result);
                 var getUsrName = usr_result.name;
                 var getUsrId = usr_result._id;
                 var finalArray = [];
                 var insertArray = [];
+                var get_error = [];
                 var game_room_entry = new game_room();
                 game_room_entry.send_from = getUsrId;
                 game_room_entry.language_name = language_name;
@@ -728,15 +736,19 @@ router.post('/send_challenge', function(req, res, next) {
                     } else {
                         var game_id = save_result._id;
                         async_node.map(myArray, function(singleId, callback) {
+                            //console.log(singleId);
                             user.findOne({ '_id': singleId }, function(opponent_err, opponent_result) {
                                 if (opponent_err) {
                                     res.send(opponent_err);
                                 } else {
-                                    if (opponent_result.device_token != '') {
+                                    //console.log(opponent_result);
+                                    if (opponent_result.device_token) {
 
                                         var deviceToken = opponent_result.device_token;
+                                        //console.log(deviceToken);
                                         var FCM = require('fcm-node');
-                                        var fcm = new FCM("AAAAVQ4bC4A:APA91bGprg3V-T-Qfbf_SfosJSyzGv4hH1UqrOpAZz6fr_onDEsoIaLBkCOKTz231ziXVmZRMJnE5le7T_-izX7c5o8SnHatF2hppfZUTcfkeohAk9WGIlxQtRFOj1bJ3YS3cxkoyfPs")
+
+                                        var fcm = new FCM("AAAAIvf_8fY:APA91bGyIz8sVZUzpT0IGqntP88iIP-z7OGFQ0dHKyMcYDvTfhrz_HFuLJ2TFJL8r8l9L6p0qZWTl-5I3vG7SWwABhm4k-LPokZSHLxcOgnwX4g1fi4kcUN7srub8IoqBh1uFgEQpcSC")
                                         var notification_body = getUsrName + " send you a challenge for SmartFeud. Please accept the challenge.";
                                         var message = {
                                             to: deviceToken,
@@ -748,61 +760,85 @@ router.post('/send_challenge', function(req, res, next) {
                                                 message: 'Message - 3',
                                                 game_id: game_id,
                                                 no_of_players: no_of_players,
-                                                board_layout: board_layout
+                                                board_layout: board_layout,
+                                                language_name: language_name,
+                                                sender_name: getUsrName
                                             }
                                         }
 
                                         fcm.send(message, function(err, response) {
                                             if (err) {
                                                 console.log(err);
-
+                                                //callback();
                                             } else {
                                                 console.log("Successfully sent with response: ", response);
                                                 finalArray.push(singleId);
                                             }
                                             callback();
                                         })
+                                    } else {
+                                        var error = {};
+                                        error.status = "error";
+                                        error.message = "device token is required.";
+                                        get_error.push(error);
+                                        callback();
                                     }
                                 }
                             });
                         }, function() {
-                            if (finalArray.length > 0) {
-                                for (var new_counter = 0; new_counter < finalArray.length; new_counter++) {
-                                    var individualArray = {};
-                                    individualArray.opponent_id = finalArray[new_counter];
-                                    individualArray.status = 0;
-                                    insertArray.push(individualArray);
-                                }
-                                game_room.findOne({ '_id': game_id }, function(game_err, game_result) {
-                                    if (game_err) {
-                                        res.send(game_err);
-                                    } else {
-                                        game_result.send_to = insertArray;
-                                        game_result.save(function(game_save_err, game_save_result) {
-                                            if (game_save_err) {
-                                                res.send(game_save_err);
-                                            } else {
-                                                var user_rank_entry = new user_rank();
-                                                user_rank_entry.game_id = game_id;
-                                                user_rank_entry.user_id = getUsrId;
-                                                user_rank_entry.rank = 1;
-                                                user_rank_entry.save(function(rank_err, rank_result) {
-                                                    if (rank_err) {
-                                                        res.send(rank_err);
-                                                    } else {
-                                                        var result = {};
-                                                        result.status = "success";
-                                                        result.message = "Invitation send successfully";
-                                                        result.game_id = game_id;
-                                                        result.board_lauout = {};
-                                                        res.send(result);
-                                                    }
-                                                })
-                                            }
-                                        })
+                            //console.log(finalArray);
+                            if (get_error.length == myArray.length) {
+                                var result = {};
+                                result.status = "error";
+                                result.message = "Device token is required.";
+                                res.send(result);
+                            } else {
+                                if (finalArray.length > 0) {
+                                    for (var new_counter = 0; new_counter < finalArray.length; new_counter++) {
+                                        var individualArray = {};
+                                        individualArray.opponent_id = finalArray[new_counter];
+                                        individualArray.status = 0;
+                                        insertArray.push(individualArray);
                                     }
-                                })
+                                    game_room.findOne({ '_id': game_id }, function(game_err, game_result) {
+                                        if (game_err) {
+                                            res.send(game_err);
+                                        } else {
+                                            game_result.send_to = insertArray;
+                                            game_result.save(function(game_save_err, game_save_result) {
+                                                if (game_save_err) {
+                                                    res.send(game_save_err);
+                                                } else {
+                                                    var user_rank_entry = new user_rank();
+                                                    user_rank_entry.game_id = game_id;
+                                                    user_rank_entry.user_id = getUsrId;
+                                                    user_rank_entry.rank = 1;
+                                                    user_rank_entry.save(function(rank_err, rank_result) {
+                                                        if (rank_err) {
+                                                            res.send(rank_err);
+                                                        } else {
+                                                            var result = {};
+                                                            result.status = "success";
+                                                            result.message = "Invitation send successfully";
+                                                            result.game_id = game_id;
+                                                            result.board_lauout = {};
+                                                            res.send(result);
+                                                        }
+                                                    })
+                                                }
+                                            })
+                                        }
+                                    })
+                                } else {
+                                    var result = {};
+                                    result.status = "error";
+                                    result.message = "Invitation not send";
+                                    result.game_id = game_id;
+                                    result.board_lauout = {};
+                                    res.send(result);
+                                }
                             }
+
 
                         });
                     }
@@ -908,7 +944,56 @@ router.post('/accept_challenge', function(req, res, next) {
 
         }
     })
-})
+});
+//----------------------- Function to declined the challenge invitation --------------------------------//
+router.post('/declined_challenge', function(req, res, next) {
+    var auth_token = req.body.auth_token;
+    var game_id = req.body.game_id;
+    user.findOne({ '_id': auth_token }, function(usr_err, usr_result) {
+        if (usr_err) {
+            res.send(usr_err);
+        } else {
+            var new_opponent_array = [];
+            var usrId = usr_result._id;
+            game_room.findOne({ '_id': game_id }, function(game_err, game_result) {
+                if (game_err) {
+                    res.send(game_err);
+                } else {
+                    //res.send(game_result);
+                    if (game_result.send_to.length > 0) {
+                        for (var counter = 0; counter < game_result.send_to.length; counter++) {
+                            var new_opponent_object = {};
+                            var opponent_id = game_result.send_to[counter].opponent_id;
+                            if (String(opponent_id) == String(usrId)) {
+                                new_opponent_object.opponent_id = game_result.send_to[counter].opponent_id;
+                                new_opponent_object._id = game_result.send_to[counter]._id;
+                                new_opponent_object.status = 2;
+                                counter_value++;
+                            } else {
+                                new_opponent_object = game_result.send_to[counter];
+
+                            }
+                            new_opponent_array.push(new_opponent_object);
+                        }
+                    }
+                    game_result.send_to = new_opponent_array;
+                    game_result.status = 2;
+                    game_result.save(function(updt_err, updt_result) {
+                        if (updt_err) {
+                            res.send(updt_err);
+                        } else {
+                            var result = {};
+                            result.status = "success";
+                            result.message = "declined successfully";
+                            res.json(result);
+                        }
+                    })
+                }
+            })
+        }
+    })
+
+});
 //----------------------- Function to add the friend -----------------------------------//
 router.post('/add_friend', function(req, res, next) {
     var auth_token = req.body.auth_token;
@@ -1057,6 +1142,132 @@ router.post('/unblock_friend', function(req, res, next) {
             }
         }
     });
+});
+//----------------------- Function to get the all friends ----------------------------------//
+router.post('/get_all_friend', function(req, res, next) {
+    var auth_token = req.body.auth_token;
+    var fb_friends = req.body.fb_friends;
+    var smartFeudFriend = [];
+    var facebookFriend = [];
+    var friendId = [];
+    var new_array = [];
+    user.findOne({ 'auth_token': auth_token }, function(usr_err, usr_result) {
+        if (usr_err) {
+            res.send(usr_err);
+        } else {
+            if (usr_result) {
+                friend.find({ 'user_id': usr_result._id }).populate('friend_id').exec(function(friend_err, friend_result) {
+                    if (friend_err) {
+                        res.send(friend_err);
+                    } else {
+                        //res.send(friend_result);
+                        if (friend_result.length > 0) {
+                            for (var friend_counter in friend_result) {
+                                var smartfeudFrnd = {};
+                                var StringFriendId = String(friend_result[friend_counter].friend_id._id);
+                                friendId.push(StringFriendId);
+                                smartfeudFrnd.user_id = friend_result[friend_counter].friend_id._id;
+                                smartfeudFrnd.user_name = friend_result[friend_counter].friend_id.name;
+                                if (friend_result[friend_counter].friend_id.image) {
+                                    if (url_regexp.test(friend_result[friend_counter].friend_id.image)) {
+                                        smartfeudFrnd.user_profilepic = friend_result[friend_counter].friend_id.image;
+                                    } else {
+                                        smartfeudFrnd.user_profilepic = profile_image_url + friend_result[friend_counter].friend_id.image;
+                                    }
+
+                                } else {
+                                    smartfeudFrnd.user_profilepic = live_url + 'uploads/no-user.png';
+                                }
+                                smartfeudFrnd.skill_rating = 10;
+                                smartfeudFrnd.last_gameplayed = 10;
+                                smartFeudFriend.push(smartfeudFrnd);
+                            }
+                        }
+
+                    }
+                    if (fb_friends) {
+                        var fbArray = fb_friends.split(",");
+                        user.find({ '_login_type': 3, 'social_id': { $in: fbArray } }, function(fb_err, fb_result) {
+                            if (fb_err) {
+                                res.send(fb_err);
+                            } else {
+                                //console.log(fb_result);
+                                if (fb_result.length > 0) {
+                                    for (var fb_counter in fb_result) {
+                                        var StringFBFriendID = String(fb_result[fb_counter]._id);
+                                        console.log(StringFBFriendID);
+                                        console.log(friendId);
+                                        console.log(friendId.indexOf(StringFBFriendID));
+                                        var indexValue = friendId.indexOf(StringFBFriendID);
+
+                                        if (indexValue == -1) {
+                                            var fb_Object = {};
+                                            fb_Object.user_id = fb_result[fb_counter]._id;
+                                            fb_Object.user_name = fb_result[fb_counter].name;
+                                            if (fb_result[fb_counter].image) {
+                                                if (url_regexp.test(fb_result[fb_counter].image)) {
+                                                    fb_Object.user_profilepic = fb_result[fb_counter].image;
+                                                } else {
+                                                    fb_Object.user_profilepic = profile_image_url + fb_result[fb_counter].image;
+                                                }
+
+                                            } else {
+                                                fb_Object.user_profilepic = live_url + 'uploads/no-user.png';
+                                            }
+                                            fb_Object.skill_rating = 10;
+                                            fb_Object.last_gameplayed = 10;
+                                            facebookFriend.push(fb_Object);
+                                        }
+                                    }
+                                }
+                                //console.log(facebookFriend);
+                                var result = {};
+                                result.status = "success";
+                                //result.smartfeud_friend = smartFeudFriend;
+                                result.facebook_friend = facebookFriend;
+                                res.json(result);
+                            }
+                        })
+                    } else {
+                        var result = {};
+                        result.status = "success";
+                        result.smartfeud_friend = smartFeudFriend;
+                        //result.facebook_friend = facebookFriend;
+                        res.json(result);
+                    }
+
+                })
+            } else {
+                var result = {};
+                result.status = "error";
+                result.message = "User not exists";
+                res.send(result);
+            }
+        }
+    })
+});
+//------------------------ Function to get the friend details -------------------------------//
+router.post('/friend_data', function(req, res, next) {
+    var auth_token = req.body.auth_token;
+    var friend_id = req.body.friend_id;
+    user.findOne({ 'auth_token': auth_token }, function(usr_err, usr_result) {
+        if (usr_err) {
+            res.send(usr_err);
+        } else {
+            if (usr_result) {
+                //user.findOne({'_id':friend_id},function())
+                var result = {};
+                result.status = "error";
+                result.message = "User not exists";
+                res.send(result);
+            } else {
+                var result = {};
+                result.status = "error";
+                result.message = "User not exists";
+                res.send(result);
+            }
+        }
+    })
 });
 router.get('/uploadTSV', function(req, res, next) {
 
