@@ -699,7 +699,6 @@ router.post('/checkWord', function(req, res, next) {
 //----------------------- Function to send the challenge by push notification --------------------------//
 router.post('/send_challenge', function(req, res, next) {
     var opponent_id = req.body.opponent_id;
-    var myArray = opponent_id.split(",");
     var auth_token = req.body.auth_token;
     var language_name = req.body.language_name;
     var board_layout = req.body.board_layout;
@@ -713,30 +712,30 @@ router.post('/send_challenge', function(req, res, next) {
             if (usr_result) {
                 var getUsrName = usr_result.name;
                 var getUsrId = usr_result._id;
-                var finalArray = [];
-                var insertArray = [];
-                var game_room_entry = new game_room();
-                game_room_entry.send_from = getUsrId;
-                game_room_entry.language_name = language_name;
-                game_room_entry.board_layout = board_layout;
-                game_room_entry.game_mode = game_mode;
-                game_room_entry.waiting_time = waiting_time;
-                game_room_entry.number_of_player = no_of_players;
-                game_room_entry.save(function(save_err, save_result) {
-                    if (save_err) {
-                        res.send(save_err);
+                user.findOne({ '_id': opponent_id }, function(opponent_err, opponent_result) {
+                    if (opponent_err) {
+                        res.send(opponent_err);
                     } else {
-                        var game_id = save_result._id;
-                        async_node.map(myArray, function(singleId, callback) {
-                            user.findOne({ '_id': singleId }, function(opponent_err, opponent_result) {
-                                if (opponent_err) {
-                                    res.send(opponent_err);
-                                } else {
-                                    if (opponent_result.device_token != '') {
-
-                                        var deviceToken = opponent_result.device_token;
+                        if (opponent_result) {
+                            if (opponent_result.device_token != '') {
+                                var deviceToken = opponent_result.device_token;
+                                //var user_details = new user();
+                                var challenge_details = new challenge();
+                                challenge_details.send_to = opponent_result._id;
+                                challenge_details.send_from = getUsrId;
+                                challenge_details.language_name = language_name;
+                                challenge_details.board_layout = board_layout;
+                                challenge_details.game_mode = opponent_result.game_mode;
+                                challenge_details.waiting_time = waiting_time;
+                                challenge_details.save(function(challenge_err, challenge_result) {
+                                    if (challenge_err) {
+                                        res.send(challenge_err);
+                                    } else {
+                                        var game_challenge_id = challenge_result._id;
+                                        //console.log(challenge_id);
                                         var FCM = require('fcm-node');
                                         var fcm = new FCM("AAAAVQ4bC4A:APA91bGprg3V-T-Qfbf_SfosJSyzGv4hH1UqrOpAZz6fr_onDEsoIaLBkCOKTz231ziXVmZRMJnE5le7T_-izX7c5o8SnHatF2hppfZUTcfkeohAk9WGIlxQtRFOj1bJ3YS3cxkoyfPs")
+
                                         var notification_body = getUsrName + " send you a challenge for SmartFeud. Please accept the challenge.";
                                         var message = {
                                             to: deviceToken,
@@ -746,68 +745,42 @@ router.post('/send_challenge', function(req, res, next) {
                                             },
                                             data: { //you can send only notification or only data(or include both) 
                                                 message: 'Message - 3',
-                                                game_id: game_id,
-                                                no_of_players: no_of_players,
-                                                board_layout: board_layout
+                                                challenge_id: game_challenge_id
                                             }
                                         }
 
                                         fcm.send(message, function(err, response) {
                                             if (err) {
                                                 console.log(err);
-
+                                                var result = {};
+                                                result.status = "error";
+                                                result.message = "Something has gone wrong!";
+                                                res.send(result);
                                             } else {
                                                 console.log("Successfully sent with response: ", response);
-                                                finalArray.push(singleId);
-                                            }
-                                            callback();
-                                        })
-                                    }
-                                }
-                            });
-                        }, function() {
-                            if (finalArray.length > 0) {
-                                for (var new_counter = 0; new_counter < finalArray.length; new_counter++) {
-                                    var individualArray = {};
-                                    individualArray.opponent_id = finalArray[new_counter];
-                                    individualArray.status = 0;
-                                    insertArray.push(individualArray);
-                                }
-                                game_room.findOne({ '_id': game_id }, function(game_err, game_result) {
-                                    if (game_err) {
-                                        res.send(game_err);
-                                    } else {
-                                        game_result.send_to = insertArray;
-                                        game_result.save(function(game_save_err, game_save_result) {
-                                            if (game_save_err) {
-                                                res.send(game_save_err);
-                                            } else {
-                                                var user_rank_entry = new user_rank();
-                                                user_rank_entry.game_id = game_id;
-                                                user_rank_entry.user_id = getUsrId;
-                                                user_rank_entry.rank = 1;
-                                                user_rank_entry.save(function(rank_err, rank_result) {
-                                                    if (rank_err) {
-                                                        res.send(rank_err);
-                                                    } else {
-                                                        var result = {};
-                                                        result.status = "success";
-                                                        result.message = "Invitation send successfully";
-                                                        result.game_id = game_id;
-                                                        result.board_lauout = {};
-                                                        res.send(result);
-                                                    }
-                                                })
+                                                var result = {};
+                                                result.status = "success";
+                                                result.message = "Invitation send successfully";
+                                                result.board_lauout = {};
+                                                res.send(result);
                                             }
                                         })
                                     }
                                 })
+                            } else {
+                                var result = {};
+                                result.status = "error";
+                                result.message = "Deview ID is required";
+                                res.send(result);
                             }
-
-                        });
+                        } else {
+                            var result = {};
+                            result.status = "error";
+                            result.message = "Sender details not found";
+                            res.send(result);
+                        }
                     }
                 })
-
             } else {
                 var result = {};
                 result.status = "error";
@@ -833,82 +806,6 @@ router.post('/send_challenge', function(req, res, next) {
 
     //res.send("THIS IS SAMPLE");
 });
-//----------------------- Function to accept the challenge invitation ----------------------------------//
-router.post('/accept_challenge', function(req, res, next) {
-    var auth_token = req.body.auth_token;
-    var game_id = req.body.game_id;
-    user.findOne({ 'auth_token': auth_token }, function(usr_err, usr_data) {
-        if (usr_err) {
-            res.send(usr_err);
-        } else {
-            if (usr_data) {
-                var usrId = usr_data._id;
-                game_room.findOne({ '_id': game_id }, function(game_err, game_result) {
-                    if (game_err) {
-                        res.send(game_err);
-                    } else {
-                        var new_opponent_array = [];
-                        var counter_value = 1;
-                        for (var counter = 0; counter < game_result.send_to.length; counter++) {
-                            var new_opponent_object = {};
-                            var opponent_id = game_result.send_to[counter].opponent_id;
-                            if (String(opponent_id) == String(usrId)) {
-                                new_opponent_object.opponent_id = game_result.send_to[counter].opponent_id;
-                                new_opponent_object._id = game_result.send_to[counter]._id;
-                                new_opponent_object.status = 1;
-                                counter_value++;
-                            } else {
-                                new_opponent_object = game_result.send_to[counter];
-                                if (game_result.send_to[counter].status == 1) {
-                                    counter_value++;
-                                }
-                            }
-                            new_opponent_array.push(new_opponent_object);
-                        }
-                        game_result.send_to = new_opponent_array;
-                        if (parseInt(counter) == parseInt(game_result.number_of_player)) {
-                            game_result.status = 1;
-                        }
-                        game_result.save(function(updt_err, updt_result) {
-                            if (updt_err) {
-                                res.send(updt_err);
-                            } else {
-                                user_rank.find({ 'game_id': game_id }, function(rank_err, rank_result) {
-                                    if (rank_err) {
-                                        res.send(rank_err);
-                                    } else {
-                                        var new_rank = parseInt(rank_result.length) + 1;
-
-                                        var user_rank_entry = new user_rank();
-                                        user_rank_entry.game_id = game_id;
-                                        user_rank_entry.user_id = usrId;
-                                        user_rank_entry.rank = new_rank;
-                                        user_rank_entry.save(function(save_rank_err, save_rank_result) {
-                                            if (save_rank_err) {
-                                                res.send(save_rank_err);
-                                            } else {
-                                                var result = {};
-                                                result.status = "success";
-                                                result.message = "Invitation accepted successfully";
-                                                res.json(result);
-                                            }
-                                        })
-                                    }
-                                })
-                            }
-                        })
-                    }
-                })
-            } else {
-                var result = {};
-                result.status = "error";
-                result.message = "User not exists";
-                res.json(result);
-            }
-
-        }
-    })
-})
 //----------------------- Function to add the friend -----------------------------------//
 router.post('/add_friend', function(req, res, next) {
     var auth_token = req.body.auth_token;
