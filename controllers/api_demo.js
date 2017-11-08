@@ -203,7 +203,7 @@ router.post('/login', function(req, res, next) {
                                 } else {
                                     //res.send(get_result);
                                     var usr_data = {};
-                                    usr_data.user_id = usr_result._id;
+                                    usr_data.user_id = get_result._id;
                                     usr_data.username = get_result.name;
                                     if (get_result.image) {
                                         if (url_regexp.test(get_result.image)) {
@@ -762,7 +762,8 @@ router.post('/send_challenge', function(req, res, next) {
                                                 no_of_players: no_of_players,
                                                 board_layout: board_layout,
                                                 language_name: language_name,
-                                                sender_name: getUsrName
+                                                sender_name: getUsrName,
+                                                challenge_type: 'challenge'
                                             }
                                         }
 
@@ -873,27 +874,37 @@ router.post('/send_challenge', function(req, res, next) {
 router.post('/accept_challenge', function(req, res, next) {
     var auth_token = req.body.auth_token;
     var game_id = req.body.game_id;
+    var NotifyUser = [];
+    var show_error = [];
     user.findOne({ 'auth_token': auth_token }, function(usr_err, usr_data) {
         if (usr_err) {
             res.send(usr_err);
         } else {
             if (usr_data) {
                 var usrId = usr_data._id;
-                game_room.findOne({ '_id': game_id }, function(game_err, game_result) {
+                game_room.findOne({ '_id': game_id }).populate('send_from').exec(function(game_err, game_result) {
                     if (game_err) {
                         res.send(game_err);
                     } else {
+                        var getUsrName = game_result.send_from.name;
+                        var no_of_players = game_result.number_of_player;
+                        var board_layout = game_result.board_layout;
+                        var language_name = game_result.language_name;
+                        //var getUsrName = game_result.send_from.name;
+                        NotifyUser.push(game_result.send_from._id);
                         var new_opponent_array = [];
                         var counter_value = 1;
                         for (var counter = 0; counter < game_result.send_to.length; counter++) {
                             var new_opponent_object = {};
                             var opponent_id = game_result.send_to[counter].opponent_id;
+
                             if (String(opponent_id) == String(usrId)) {
                                 new_opponent_object.opponent_id = game_result.send_to[counter].opponent_id;
                                 new_opponent_object._id = game_result.send_to[counter]._id;
                                 new_opponent_object.status = 1;
                                 counter_value++;
                             } else {
+                                NotifyUser.push(opponent_id);
                                 new_opponent_object = game_result.send_to[counter];
                                 if (game_result.send_to[counter].status == 1) {
                                     counter_value++;
@@ -914,7 +925,6 @@ router.post('/accept_challenge', function(req, res, next) {
                                         res.send(rank_err);
                                     } else {
                                         var new_rank = parseInt(rank_result.length) + 1;
-
                                         var user_rank_entry = new user_rank();
                                         user_rank_entry.game_id = game_id;
                                         user_rank_entry.user_id = usrId;
@@ -923,10 +933,75 @@ router.post('/accept_challenge', function(req, res, next) {
                                             if (save_rank_err) {
                                                 res.send(save_rank_err);
                                             } else {
-                                                var result = {};
-                                                result.status = "success";
-                                                result.message = "Invitation accepted successfully";
-                                                res.json(result);
+                                                async_node.map(NotifyUser, function(singleId, callbackNext) {
+                                                    user.findOne({ '_id': singleId }, function(notify_err, notify_result) {
+                                                        if (notify_err) {
+                                                            var error_msg = notify_err;
+                                                            show_error.push(error_msg);
+                                                        } else {
+                                                            if (notify_result) {
+                                                                if (notify_result.device_token) {
+                                                                    var deviceToken = notify_result.device_token;
+                                                                    var FCM = require('fcm-node');
+                                                                    var fcm = new FCM("AAAAIvf_8fY:APA91bGyIz8sVZUzpT0IGqntP88iIP-z7OGFQ0dHKyMcYDvTfhrz_HFuLJ2TFJL8r8l9L6p0qZWTl-5I3vG7SWwABhm4k-LPokZSHLxcOgnwX4g1fi4kcUN7srub8IoqBh1uFgEQpcSC")
+                                                                    var notification_body = getUsrName + " accept this challenge.";
+                                                                    var message = {
+                                                                        to: deviceToken,
+                                                                        notification: {
+                                                                            title: 'Smart Feud',
+                                                                            body: notification_body
+                                                                        },
+                                                                        data: { //you can send only notification or only data(or include both) 
+                                                                            message: 'Message - 3',
+                                                                            game_id: game_id,
+                                                                            no_of_players: no_of_players,
+                                                                            board_layout: board_layout,
+                                                                            language_name: language_name,
+                                                                            sender_name: getUsrName,
+                                                                            challenge_type: 'accept'
+                                                                        }
+                                                                    }
+                                                                    fcm.send(message, function(err, response) {
+                                                                        if (err) {
+                                                                            console.log(err);
+                                                                            show_error.push(singleId);
+                                                                        } else {
+                                                                            console.log("Successfully sent with response: ", response);
+                                                                        }
+                                                                        callback();
+                                                                    })
+                                                                } else {
+                                                                    var error_msg = 'Invalid device token';
+                                                                    show_error.push(error_msg);
+                                                                    callback();
+                                                                }
+                                                            }
+                                                        }
+                                                    })
+                                                }, function() {
+                                                    if (show_error.length > 0) {
+                                                        if (NotifyUser.length == show_error.length) {
+                                                            var result = {};
+                                                            result.status = "error";
+                                                            result.message = "Device token is required.";
+                                                            res.json(result);
+                                                        } else {
+                                                            var result = {};
+                                                            result.status = "success";
+                                                            result.message = "Invitation accepted successfully";
+                                                            res.json(result);
+                                                        }
+                                                    } else {
+                                                        var result = {};
+                                                        result.status = "success";
+                                                        result.message = "Invitation accepted successfully";
+                                                        res.json(result);
+                                                    }
+                                                });
+                                                // var result = {};
+                                                // result.status = "success";
+                                                // result.message = "Invitation accepted successfully";
+                                                // res.json(result);
                                             }
                                         })
                                     }
@@ -949,17 +1024,24 @@ router.post('/accept_challenge', function(req, res, next) {
 router.post('/declined_challenge', function(req, res, next) {
     var auth_token = req.body.auth_token;
     var game_id = req.body.game_id;
+    var NotifyUser = [];
+    //var NotifyUser = [];
     user.findOne({ '_id': auth_token }, function(usr_err, usr_result) {
         if (usr_err) {
             res.send(usr_err);
         } else {
             var new_opponent_array = [];
             var usrId = usr_result._id;
+            var getUsrName = usr_result.name;
             game_room.findOne({ '_id': game_id }, function(game_err, game_result) {
                 if (game_err) {
                     res.send(game_err);
                 } else {
-                    //res.send(game_result);
+                    var game_id = game_result._id;
+                    var no_of_players = game_result.no_of_players;
+                    var board_layout = game_result.board_layout;
+                    var language_name = game_result.language_name;
+                    NotifyUser.push(game_result.send_from);
                     if (game_result.send_to.length > 0) {
                         for (var counter = 0; counter < game_result.send_to.length; counter++) {
                             var new_opponent_object = {};
@@ -974,6 +1056,7 @@ router.post('/declined_challenge', function(req, res, next) {
 
                             }
                             new_opponent_array.push(new_opponent_object);
+                            NotifyUser.push(opponent_id);
                         }
                     }
                     game_result.send_to = new_opponent_array;
@@ -982,10 +1065,72 @@ router.post('/declined_challenge', function(req, res, next) {
                         if (updt_err) {
                             res.send(updt_err);
                         } else {
-                            var result = {};
-                            result.status = "success";
-                            result.message = "declined successfully";
-                            res.json(result);
+                            var show_error = [];
+                            async_node.map(NotifyUser, function(singleId, callbackNext) {
+                                user.findOne({ '_id': singleId }, function(notify_err, notify_result) {
+                                    if (notify_err) {
+                                        var error_msg = notify_err;
+                                        show_error.push(error_msg);
+                                    } else {
+                                        if (notify_result) {
+                                            if (notify_result.device_token) {
+                                                var deviceToken = notify_result.device_token;
+                                                var FCM = require('fcm-node');
+                                                var fcm = new FCM("AAAAIvf_8fY:APA91bGyIz8sVZUzpT0IGqntP88iIP-z7OGFQ0dHKyMcYDvTfhrz_HFuLJ2TFJL8r8l9L6p0qZWTl-5I3vG7SWwABhm4k-LPokZSHLxcOgnwX4g1fi4kcUN7srub8IoqBh1uFgEQpcSC")
+                                                var notification_body = getUsrName + " declined this game.";
+                                                var message = {
+                                                    to: deviceToken,
+                                                    notification: {
+                                                        title: 'Smart Feud',
+                                                        body: notification_body
+                                                    },
+                                                    data: { //you can send only notification or only data(or include both) 
+                                                        message: 'Message - 3',
+                                                        game_id: game_id,
+                                                        no_of_players: no_of_players,
+                                                        board_layout: board_layout,
+                                                        language_name: language_name,
+                                                        sender_name: getUsrName,
+                                                        challenge_type: 'decline'
+                                                    }
+                                                }
+                                                fcm.send(message, function(err, response) {
+                                                    if (err) {
+                                                        console.log(err);
+                                                        show_error.push(singleId);
+                                                    } else {
+                                                        console.log("Successfully sent with response: ", response);
+                                                    }
+                                                    callback();
+                                                })
+                                            } else {
+                                                var error_msg = 'Invalid device token';
+                                                show_error.push(error_msg);
+                                                callback();
+                                            }
+                                        }
+                                    }
+                                })
+                            }, function() {
+                                if (show_error.length > 0) {
+                                    if (NotifyUser.length == show_error.length) {
+                                        var result = {};
+                                        result.status = "error";
+                                        result.message = "Device token is required.";
+                                        res.json(result);
+                                    } else {
+                                        var result = {};
+                                        result.status = "success";
+                                        result.message = "Declined successfully";
+                                        res.json(result);
+                                    }
+                                } else {
+                                    var result = {};
+                                    result.status = "success";
+                                    result.message = "Declined successfully";
+                                    res.json(result);
+                                }
+                            });
                         }
                     })
                 }
@@ -1255,11 +1400,59 @@ router.post('/friend_data', function(req, res, next) {
             res.send(usr_err);
         } else {
             if (usr_result) {
-                //user.findOne({'_id':friend_id},function())
-                var result = {};
-                result.status = "error";
-                result.message = "User not exists";
-                res.send(result);
+                var usrId = usr_result._id;
+                user.findOne({ '_id': friend_id }, function(friend_err, friend_result) {
+                    if (friend_err) {
+                        res.send(friend_err);
+                    } else {
+                        if (friend_result) {
+                            block_user.findOne({ 'user_id': usrId, 'block_id': friend_id }, function(block_err, block_result) {
+                                if (block_err) {
+                                    res.send(block_err);
+                                } else {
+                                    if (block_result) {
+                                        var block_status = true;
+                                    } else {
+                                        var block_status = false;
+                                    }
+                                    var user_details = {};
+                                    user_details.user_id = friend_result._id;
+                                    user_details.user_name = friend_result.name;
+                                    if (friend_result.image) {
+                                        if (url_regexp.test(friend_result.image)) {
+                                            user_details.user_profilepic = friend_result.image;
+                                        } else {
+                                            user_details.user_profilepic = profile_image_url + friend_result.image;
+                                        }
+
+                                    } else {
+                                        user_details.user_profilepic = live_url + 'uploads/no-user.png';
+                                    }
+                                    user_details.skill_rating = 10;
+                                    user_details.last_gameplayed = 10;
+                                    user_details.wins = 10;
+                                    user_details.draw = 10;
+                                    user_details.losts = 10;
+                                    user_details.friend_type = friend_result._login_type;
+                                    user_details.blocked_status = block_status;
+                                    var result = {};
+                                    result.status = "success";
+                                    result.data = user_details;
+                                    res.send(result);
+                                }
+                            })
+
+                        } else {
+                            var result = {};
+                            result.status = "error";
+                            result.message = "invalid friend ID";
+                            res.send(result);
+                        }
+
+                    }
+                })
+
+
             } else {
                 var result = {};
                 result.status = "error";
