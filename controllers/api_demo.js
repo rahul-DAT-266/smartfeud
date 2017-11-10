@@ -14,6 +14,7 @@ var block_user = require('../models/Block_user');
 var test_game = require('../models/Test_game');
 var game_room = require('../models/Game_room');
 var user_rank = require('../models/User_rank');
+var game_word = require('../models/Game_word');
 var PushNotification = require('../utility/push-notification');
 //var push_notification = PushNotification();
 var router = express.Router();
@@ -772,7 +773,7 @@ router.post('/send_challenge', function(req, res, next) {
                                                 console.log(err);
                                                 //callback();
                                             } else {
-                                                console.log("Successfully sent with response: ", response);
+                                                console.log("Successfully sent with challenge request: ", response);
                                                 finalArray.push(singleId);
                                             }
                                             callback();
@@ -966,14 +967,14 @@ router.post('/accept_challenge', function(req, res, next) {
                                                                             console.log(err);
                                                                             show_error.push(singleId);
                                                                         } else {
-                                                                            console.log("Successfully sent with response: ", response);
+                                                                            console.log("Successfully sent with accept response: ", response);
                                                                         }
-                                                                        callback();
+                                                                        callbackNext();
                                                                     })
                                                                 } else {
                                                                     var error_msg = 'Invalid device token';
                                                                     show_error.push(error_msg);
-                                                                    callback();
+                                                                    callbackNext();
                                                                 }
                                                             }
                                                         }
@@ -1026,7 +1027,7 @@ router.post('/declined_challenge', function(req, res, next) {
     var game_id = req.body.game_id;
     var NotifyUser = [];
     //var NotifyUser = [];
-    user.findOne({ '_id': auth_token }, function(usr_err, usr_result) {
+    user.findOne({ 'auth_token': auth_token }, function(usr_err, usr_result) {
         if (usr_err) {
             res.send(usr_err);
         } else {
@@ -1037,8 +1038,9 @@ router.post('/declined_challenge', function(req, res, next) {
                 if (game_err) {
                     res.send(game_err);
                 } else {
+                    //console.log(game_result);
                     var game_id = game_result._id;
-                    var no_of_players = game_result.no_of_players;
+                    var no_of_players = game_result.number_of_player;
                     var board_layout = game_result.board_layout;
                     var language_name = game_result.language_name;
                     NotifyUser.push(game_result.send_from);
@@ -1050,22 +1052,24 @@ router.post('/declined_challenge', function(req, res, next) {
                                 new_opponent_object.opponent_id = game_result.send_to[counter].opponent_id;
                                 new_opponent_object._id = game_result.send_to[counter]._id;
                                 new_opponent_object.status = 2;
-                                counter_value++;
+                                //counter_value++;
                             } else {
                                 new_opponent_object = game_result.send_to[counter];
+                                NotifyUser.push(opponent_id);
 
                             }
                             new_opponent_array.push(new_opponent_object);
-                            NotifyUser.push(opponent_id);
+
                         }
                     }
                     game_result.send_to = new_opponent_array;
-                    game_result.status = 2;
+                    game_result.game_status = 2;
                     game_result.save(function(updt_err, updt_result) {
                         if (updt_err) {
                             res.send(updt_err);
                         } else {
                             var show_error = [];
+                            console.log(NotifyUser);
                             async_node.map(NotifyUser, function(singleId, callbackNext) {
                                 user.findOne({ '_id': singleId }, function(notify_err, notify_result) {
                                     if (notify_err) {
@@ -1099,14 +1103,15 @@ router.post('/declined_challenge', function(req, res, next) {
                                                         console.log(err);
                                                         show_error.push(singleId);
                                                     } else {
-                                                        console.log("Successfully sent with response: ", response);
+                                                        console.log("Successfully sent with declined response: ", response);
+                                                        console.log(message.data);
                                                     }
-                                                    callback();
+                                                    callbackNext();
                                                 })
                                             } else {
                                                 var error_msg = 'Invalid device token';
                                                 show_error.push(error_msg);
-                                                callback();
+                                                callbackNext();
                                             }
                                         }
                                     }
@@ -1149,19 +1154,33 @@ router.post('/add_friend', function(req, res, next) {
         } else {
             if (usr_result) {
                 var userId = usr_result._id;
-                var friendDetails = new friend();
-                friendDetails.user_id = userId;
-                friendDetails.friend_id = opponent_id;
-                friendDetails.save(function(save_err, save_result) {
-                    if (save_err) {
-                        res.send(save_err);
+                friend.findOne({ 'user_id': usr_result._id, 'friend_id': opponent_id }, function(check_existance_err, check_existance_result) {
+                    if (check_existance_err) {
+                        res.send(check_existance_err);
                     } else {
-                        var result = {};
-                        result.status = "success";
-                        result.message = "Friend Added Succesfully";
-                        res.send(result);
+                        if (check_existance_result) {
+                            var result = {};
+                            result.status = "error";
+                            result.message = "This friend is allready added in your frinedlist";
+                            res.send(result);
+                        } else {
+                            var friendDetails = new friend();
+                            friendDetails.user_id = userId;
+                            friendDetails.friend_id = opponent_id;
+                            friendDetails.save(function(save_err, save_result) {
+                                if (save_err) {
+                                    res.send(save_err);
+                                } else {
+                                    var result = {};
+                                    result.status = "success";
+                                    result.message = "Friend Added Succesfully";
+                                    res.send(result);
+                                }
+                            })
+                        }
                     }
                 })
+
             } else {
                 var result = {};
                 result.status = "error";
@@ -1181,19 +1200,33 @@ router.post('/block_friend', function(req, res, next) {
         } else {
             if (usr_result) {
                 var userId = usr_result._id;
-                var blockUserDetails = new block_user();
-                blockUserDetails.user_id = userId;
-                blockUserDetails.block_id = opponent_id;
-                blockUserDetails.save(function(save_err, save_result) {
-                    if (save_err) {
-                        res.send(save_err);
+                block_user.findOne({ 'user_id': userId, 'block_id': opponent_id }, function(block_exiist_err, block_exist_result) {
+                    if (block_exiist_err) {
+                        res.send(block_exiist_err);
                     } else {
-                        var result = {};
-                        result.status = "success";
-                        result.message = "User has been blocked succesfully";
-                        res.send(result);
+                        if (block_exist_result) {
+                            var result = {};
+                            result.status = "error";
+                            result.message = "This friend has been allready blocked.";
+                            res.send(result);
+                        } else {
+                            var blockUserDetails = new block_user();
+                            blockUserDetails.user_id = userId;
+                            blockUserDetails.block_id = opponent_id;
+                            blockUserDetails.save(function(save_err, save_result) {
+                                if (save_err) {
+                                    res.send(save_err);
+                                } else {
+                                    var result = {};
+                                    result.status = "success";
+                                    result.message = "User has been blocked succesfully";
+                                    res.send(result);
+                                }
+                            })
+                        }
                     }
                 })
+
             } else {
                 var result = {};
                 result.status = "error";
@@ -1226,13 +1259,16 @@ router.post('/block_list', function(req, res, next) {
                                 usr_obj.user_name = get_result.name;
                                 if (get_result.image) {
                                     if (url_regexp.test(get_result.image)) {
-                                        usr_obj.image = get_result.image;
+                                        usr_obj.user_profilepic = get_result.image;
                                     } else {
-                                        usr_obj.image = live_url + 'uploads/' + get_result.image;
+                                        usr_obj.user_profilepic = live_url + 'uploads/' + get_result.image;
                                     }
                                 } else {
-                                    usr_obj.image = live_url + 'uploads/no-user.png';
+                                    usr_obj.user_profilepic = live_url + 'uploads/no-user.png';
                                 }
+                                usr_obj.wins = 10;
+                                usr_obj.draws = 10;
+                                usr_obj.losts = 10;
                                 block_result_arr.push(usr_obj);
                             }
                         }
@@ -1256,6 +1292,7 @@ router.post('/block_list', function(req, res, next) {
 router.post('/unblock_friend', function(req, res, next) {
     var auth_token = req.body.auth_token;
     var blocked_user_id = req.body.blocked_user_id;
+
     user.findOne({ 'auth_token': auth_token }, function(usr_err, usr_result) {
         if (usr_err) {
             res.send(usr_err);
@@ -1266,6 +1303,7 @@ router.post('/unblock_friend', function(req, res, next) {
                     if (block_usr_err) {
                         res.send(block_usr_err);
                     } else {
+                        console.log(block_usr_result);
                         block_user.remove({ '_id': block_usr_result._id }, function(delete_block_err, delete_block_result) {
                             if (delete_block_err) {
                                 res.send(delete_block_err);
@@ -1301,87 +1339,143 @@ router.post('/get_all_friend', function(req, res, next) {
             res.send(usr_err);
         } else {
             if (usr_result) {
-                friend.find({ 'user_id': usr_result._id }).populate('friend_id').exec(function(friend_err, friend_result) {
-                    if (friend_err) {
-                        res.send(friend_err);
-                    } else {
-                        //res.send(friend_result);
-                        if (friend_result.length > 0) {
-                            for (var friend_counter in friend_result) {
-                                var smartfeudFrnd = {};
-                                var StringFriendId = String(friend_result[friend_counter].friend_id._id);
-                                friendId.push(StringFriendId);
-                                smartfeudFrnd.user_id = friend_result[friend_counter].friend_id._id;
-                                smartfeudFrnd.user_name = friend_result[friend_counter].friend_id.name;
-                                if (friend_result[friend_counter].friend_id.image) {
-                                    if (url_regexp.test(friend_result[friend_counter].friend_id.image)) {
-                                        smartfeudFrnd.user_profilepic = friend_result[friend_counter].friend_id.image;
-                                    } else {
-                                        smartfeudFrnd.user_profilepic = profile_image_url + friend_result[friend_counter].friend_id.image;
-                                    }
 
-                                } else {
-                                    smartfeudFrnd.user_profilepic = live_url + 'uploads/no-user.png';
+
+                if (fb_friends) {
+                    friend.find({ 'user_id': usr_result._id }).populate('friend_id').exec(function(friend_err, friend_result) {
+                        if (friend_err) {
+                            res.send(friend_err);
+                        } else {
+                            //res.send(friend_result);
+                            //console.log(friend_result);
+                            if (friend_result.length > 0) {
+                                for (var friend_counter in friend_result) {
+                                    var smartfeudFrnd = {};
+                                    var StringFriendId = String(friend_result[friend_counter].friend_id._id);
+                                    friendId.push(StringFriendId);
                                 }
-                                smartfeudFrnd.skill_rating = 10;
-                                smartfeudFrnd.last_gameplayed = 10;
-                                smartFeudFriend.push(smartfeudFrnd);
                             }
-                        }
+                            var fbArray = fb_friends.split(",");
+                            user.find({ '_login_type': 3, 'social_id': { $in: fbArray } }, function(fb_err, fb_result) {
+                                if (fb_err) {
+                                    res.send(fb_err);
+                                } else {
+                                    //console.log(fb_result.length, "JAUYATISH");
+                                    if (fb_result.length > 0) {
+                                        async_node.map(fb_result, function(fb_counter, callbackNext) {
+                                            var StringFBFriendID = String(fb_counter._id);
+                                            var indexValue = friendId.indexOf(StringFBFriendID);
+                                            if (indexValue == -1) {
+                                                block_user.findOne({ 'user_id': usr_result._id, 'block_id': fb_counter._id }, function(block_err, block_result) {
+                                                    if (block_err) {
+                                                        res.send(block_err);
+                                                    } else {
+                                                        if (block_result) {
+                                                            var block_status = true;
+                                                        } else {
+                                                            var block_status = false;
+                                                            var fb_Object = {};
+                                                            fb_Object.user_id = fb_counter._id;
+                                                            fb_Object.user_name = fb_counter.name;
+                                                            if (fb_counter.image) {
+                                                                if (url_regexp.test(fb_counter.image)) {
+                                                                    fb_Object.user_profilepic = fb_counter.image;
+                                                                } else {
+                                                                    fb_Object.user_profilepic = profile_image_url + fb_counter.image;
+                                                                }
 
-                    }
-                    if (fb_friends) {
-                        var fbArray = fb_friends.split(",");
-                        user.find({ '_login_type': 3, 'social_id': { $in: fbArray } }, function(fb_err, fb_result) {
-                            if (fb_err) {
-                                res.send(fb_err);
-                            } else {
-                                //console.log(fb_result);
-                                if (fb_result.length > 0) {
-                                    for (var fb_counter in fb_result) {
-                                        var StringFBFriendID = String(fb_result[fb_counter]._id);
-                                        console.log(StringFBFriendID);
-                                        console.log(friendId);
-                                        console.log(friendId.indexOf(StringFBFriendID));
-                                        var indexValue = friendId.indexOf(StringFBFriendID);
-
-                                        if (indexValue == -1) {
-                                            var fb_Object = {};
-                                            fb_Object.user_id = fb_result[fb_counter]._id;
-                                            fb_Object.user_name = fb_result[fb_counter].name;
-                                            if (fb_result[fb_counter].image) {
-                                                if (url_regexp.test(fb_result[fb_counter].image)) {
-                                                    fb_Object.user_profilepic = fb_result[fb_counter].image;
-                                                } else {
-                                                    fb_Object.user_profilepic = profile_image_url + fb_result[fb_counter].image;
-                                                }
-
+                                                            } else {
+                                                                fb_Object.user_profilepic = live_url + 'uploads/no-user.png';
+                                                            }
+                                                            fb_Object.skill_rating = 10;
+                                                            fb_Object.last_gameplayed = 10;
+                                                            fb_Object.wins = 10;
+                                                            fb_Object.draws = 10;
+                                                            fb_Object.losts = 10;
+                                                            facebookFriend.push(fb_Object);
+                                                        }
+                                                        callbackNext();
+                                                    }
+                                                });
                                             } else {
-                                                fb_Object.user_profilepic = live_url + 'uploads/no-user.png';
+                                                callbackNext();
                                             }
-                                            fb_Object.skill_rating = 10;
-                                            fb_Object.last_gameplayed = 10;
-                                            facebookFriend.push(fb_Object);
-                                        }
+                                        }, function() {
+                                            var result = {};
+                                            result.status = "success";
+                                            result.facebook_friend = facebookFriend;
+                                            res.json(result);
+                                        });
+                                    } else {
+                                        var result = {};
+                                        result.status = "success";
+                                        result.facebook_friend = facebookFriend;
+                                        res.json(result);
                                     }
                                 }
-                                //console.log(facebookFriend);
+                            });
+
+                        }
+                    });
+
+                } else {
+                    friend.find({ 'user_id': usr_result._id }).populate('friend_id').exec(function(friend_err, friend_result) {
+                        if (friend_err) {
+                            res.send(friend_err);
+                        } else {
+                            if (friend_result.length > 0) {
+                                async_node.map(friend_result, function(singleFriendId, callbackNext) {
+
+                                    block_user.findOne({ 'user_id': usr_result._id, 'block_id': singleFriendId.friend_id._id }, function(block_err, block_result) {
+                                        if (block_err) {
+                                            res.send(block_err);
+                                        } else {
+                                            if (block_result) {
+                                                var block_status = true;
+                                            } else {
+                                                var block_status = false;
+                                                var smartfeudFrnd = {};
+                                                smartfeudFrnd.user_id = singleFriendId.friend_id._id;
+                                                smartfeudFrnd.user_name = singleFriendId.friend_id.name;
+                                                if (singleFriendId.friend_id.image) {
+                                                    if (url_regexp.test(singleFriendId.friend_id.image)) {
+                                                        smartfeudFrnd.user_profilepic = singleFriendId.friend_id.image;
+                                                    } else {
+                                                        smartfeudFrnd.user_profilepic = profile_image_url + singleFriendId.friend_id.image;
+                                                    }
+
+                                                } else {
+                                                    smartfeudFrnd.user_profilepic = live_url + 'uploads/no-user.png';
+                                                }
+                                                smartfeudFrnd.skill_rating = 10;
+                                                smartfeudFrnd.last_gameplayed = 10;
+                                                smartfeudFrnd.wins = 10;
+                                                smartfeudFrnd.draws = 10;
+                                                smartfeudFrnd.losts = 10;
+                                                smartFeudFriend.push(smartfeudFrnd);
+                                            }
+                                            callbackNext();
+                                        }
+                                    });
+                                }, function() {
+                                    var result = {};
+                                    result.status = "success";
+                                    result.smartfeud_friend = smartFeudFriend;
+                                    res.json(result);
+                                })
+                            } else {
                                 var result = {};
                                 result.status = "success";
-                                //result.smartfeud_friend = smartFeudFriend;
-                                result.facebook_friend = facebookFriend;
+                                result.smartfeud_friend = smartFeudFriend;
                                 res.json(result);
                             }
-                        })
-                    } else {
-                        var result = {};
-                        result.status = "success";
-                        result.smartfeud_friend = smartFeudFriend;
-                        //result.facebook_friend = facebookFriend;
-                        res.json(result);
-                    }
+                        }
+                    });
+                    console.log(smartFeudFriend);
 
-                })
+                }
+
+                //})
             } else {
                 var result = {};
                 result.status = "error";
@@ -1462,6 +1556,196 @@ router.post('/friend_data', function(req, res, next) {
         }
     })
 });
+//----------------------- Function to get random opponent ----------------------------------//
+router.post('/random_oponent', function(req, res, next) {
+    var auth_token = req.body.auth_token;
+    var language_name = req.body.language_name;
+    var board_layout = req.body.board_layout;
+    var game_mode = req.body.game_mode;
+    var waiting_time = req.body.waiting_time;
+    var no_of_players = req.body.no_of_players;
+    user.findOne({ 'auth_token': auth_token }, function(usr_err, usr_result) {
+        if (usr_err) {
+            console.log("User find Error 1");
+            res.send(usr_err);
+        } else {
+            if (usr_result) {
+                var usrID = usr_result._id;
+                var getUsrName = usr_result.name;
+                user.find({ '_id': { $ne: usrID }, 'device_token': { $ne: '' } }, function(usr_list_err, usr_list_result) {
+                    if (usr_list_err) {
+                        console.log("User find Error 2");
+                        res.send(usr_list_err);
+                    } else {
+                        var added_user_id = [];
+                        async_node.map(usr_list_result, function(singleId, callbackNext) {
+                            if (singleId.device_token) {
+                                added_user_id.push(singleId._id);
+                            }
+                            callbackNext();
+                        }, function() {
+                            if (added_user_id.length > 0) {
+                                added_user_id = shuffle(added_user_id);
+                                var opponent_id = added_user_id[0];
+                                //res.send(added_user_id);
+                                user.findOne({ '_id': opponent_id }, function(opponent_err, opponent_result) {
+                                    if (opponent_err) {
+                                        console.log("User find Error 3");
+                                        res.send(opponent_err);
+                                    } else {
+                                        var insertArray = [];
+                                        var individualArray = {};
+                                        individualArray.opponent_id = opponent_id;
+                                        individualArray.status = 0;
+                                        insertArray.push(individualArray);
+                                        console.log(insertArray);
+                                        var game_room_entry = new game_room();
+                                        game_room_entry.send_from = usrID;
+                                        game_room_entry.language_name = language_name;
+                                        game_room_entry.board_layout = board_layout;
+                                        game_room_entry.game_mode = game_mode;
+                                        game_room_entry.waiting_time = waiting_time;
+                                        game_room_entry.number_of_player = no_of_players;
+                                        game_room_entry.send_to = insertArray;
+                                        game_room_entry.save(function(game_save_err, game_save_result) {
+                                            if (game_save_err) {
+                                                console.log("User find Error 4");
+                                                res.send(game_save_err);
+                                            } else {
+                                                var game_id = game_save_result._id;
+                                                var deviceToken = opponent_result.device_token;
+                                                var FCM = require('fcm-node');
+                                                var fcm = new FCM("AAAAIvf_8fY:APA91bGyIz8sVZUzpT0IGqntP88iIP-z7OGFQ0dHKyMcYDvTfhrz_HFuLJ2TFJL8r8l9L6p0qZWTl-5I3vG7SWwABhm4k-LPokZSHLxcOgnwX4g1fi4kcUN7srub8IoqBh1uFgEQpcSC")
+                                                var notification_body = getUsrName + "  send you a challenge for SmartFeud. Please accept the challenge.";
+                                                var message = {
+                                                    to: deviceToken,
+                                                    notification: {
+                                                        title: 'Smart Feud',
+                                                        body: notification_body
+                                                    },
+                                                    data: { //you can send only notification or only data(or include both) 
+                                                        message: 'Message - 3',
+                                                        game_id: game_id,
+                                                        no_of_players: no_of_players,
+                                                        board_layout: board_layout,
+                                                        language_name: language_name,
+                                                        sender_name: getUsrName,
+                                                        challenge_type: 'challenge'
+                                                    }
+                                                }
+                                                fcm.send(message, function(err, response) {
+                                                    if (err) {
+                                                        console.log(err);
+                                                        var result = {};
+                                                        result.status = "error";
+                                                        result.message = "Invitation not sent";
+                                                        res.json(result);
+                                                    } else {
+                                                        console.log("Successfully sent with challenge response: ", response);
+                                                        var user_rank_entry = new user_rank();
+                                                        user_rank_entry.game_id = game_id;
+                                                        user_rank_entry.user_id = usrID;
+                                                        user_rank_entry.rank = 1;
+                                                        user_rank_entry.save(function(rank_err, rank_result) {
+                                                            if (rank_err) {
+                                                                res.send(rank_err);
+                                                            } else {
+                                                                var result = {};
+                                                                result.status = "success";
+                                                                result.message = "Invitation send successfully";
+                                                                result.game_id = game_id;
+                                                                result.board_lauout = {};
+                                                                res.send(result);
+                                                            }
+                                                        })
+                                                    }
+
+                                                })
+                                            }
+                                        })
+                                    }
+                                });
+                            } else {
+                                var result = {};
+                                result.status = 'error';
+                                result.message = 'There is not any opponent';
+                                res.json(result);
+                            }
+                            //res.send(added_user_id);
+                        });
+
+                    }
+                });
+            }
+        }
+    })
+});
+router.post('/random_array', function(req, res, next) {
+    var auth_token = req.body.auth_token;
+    var language_code = req.body.language_code;
+    game_word.findOne({ 'language_code': language_code }, function(shuffle_err, shuffle_result) {
+        if (shuffle_err) {
+            res.send(shuffle_err);
+        } else {
+            console.log(shuffle_result.letter.length);
+            var shuffle_value = shuffle_result.letter;
+            shuffle_value = shuffle(shuffle_value);
+            var new_generate_array = [];
+            var rest_array = [];
+            for (var counter = 0; counter < 7; counter++) {
+                new_generate_array.push(shuffle_value[counter]);
+            }
+            for (var rest_counter = 0; rest_counter < shuffle_value.length; rest_counter++) {
+                if (new_generate_array.indexOf(shuffle_value[rest_counter]) == -1) {
+                    rest_array.push(shuffle_value[rest_counter]);
+                }
+            }
+            console.log(new_generate_array.length);
+            console.log(rest_array.length);
+            console.log(shuffle_value.length);
+            var result = {};
+            result.available_array = new_generate_array;
+            result.rest_array = rest_array;
+            result.total_array = shuffle_value;
+            res.send(result);
+        }
+    })
+})
+router.post('/insertWord', function(req, res, next) {
+    var auth_token = req.body.auth_token;
+    var language_code = req.body.language_code;
+    var words = req.body.word_list;
+
+    game_word.findOne({ 'language_code': language_code }, function(word_err, word_result) {
+        if (word_err) {
+            res.send(word_err);
+        } else {
+            var exist_words = word_result.letter;
+            var word_list = words.split(",");
+            for (var count in word_list) {
+                var wordObj = {};
+                var split_more_word = word_list[count].split('##');
+                wordObj.charecter = split_more_word[0];
+                wordObj.value = split_more_word[1];
+                exist_words.push(wordObj);
+            }
+            word_result.letter = exist_words;
+            word_result.save(function(updt_err, updt_result) {
+                if (updt_err) {
+                    res.send(updt_err);
+                } else {
+                    var result = {};
+                    result.status = "success";
+                    result.message = "Word list updated";
+                    res.send(result);
+                }
+            })
+            //res.send(exist_words);
+        }
+    })
+
+    //res.send(insert_language_code);
+})
 router.get('/uploadTSV', function(req, res, next) {
 
 
