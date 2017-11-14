@@ -18,7 +18,6 @@ var game_word = require('../models/Game_word');
 var PushNotification = require('../utility/push-notification');
 //var push_notification = PushNotification();
 var router = express.Router();
-var socket = require('socket.io-client')('ws://182.75.72.148:3001');
 var live_url = 'http://182.75.72.148:3001/';
 var profile_image_url = 'http://182.75.72.148/smartfeud_image/uploads/smartfued_image/';
 var url_regexp = /(ftp|http|https):\/\/(\w+:{0,1}\w*@)?(\S+)(:[0-9]+)?(\/|\/([\w#!:.?+=&%@!\-\/]))?/;
@@ -704,6 +703,8 @@ router.post('/checkWord', function(req, res, next) {
 //----------------------- Function to send the challenge by push notification --------------------------//
 router.post('/send_challenge', function(req, res, next) {
     var opponent_id = req.body.opponent_id;
+    //var opponentString = opponent_id.replace(/['"]+/g, '')
+    //console.log(opponent_id);
     var myArray = opponent_id.split(",");
     var auth_token = req.body.auth_token;
     var language_name = req.body.language_name;
@@ -711,217 +712,165 @@ router.post('/send_challenge', function(req, res, next) {
     var game_mode = req.body.game_mode;
     var waiting_time = req.body.waiting_time;
     var no_of_players = req.body.no_of_players;
-    if ((language_name == 'English (United States)') || (language_name == 'English (United Kingdom)')) {
-        var language_code = 'ENG';
-    } else {
-        var language_code = 'DUT';
-    }
-    async_node.waterfall([function(callback) {
-        var firstCallback = {};
-        game_word.findOne({ 'language_code': language_code }, function(shuffle_err, shuffle_result) {
-            if (shuffle_err) {
-                callback(shuffle_err, null);
-            } else {
-                //console.log(shuffle_result.letter.length);
-                var shuffle_value = shuffle_result.letter;
-                shuffle_value = shuffle(shuffle_value);
-                var new_generate_array = [];
-                var rest_array = [];
-                for (var counter = 0; counter < 7; counter++) {
-                    new_generate_array.push(shuffle_value[counter]);
-                }
-                for (var rest_counter = 0; rest_counter < shuffle_value.length; rest_counter++) {
-                    if (new_generate_array.indexOf(shuffle_value[rest_counter]) == -1) {
-                        rest_array.push(shuffle_value[rest_counter]);
-                    }
-                }
-                firstCallback.available_array = new_generate_array;
-                firstCallback.rest_array = rest_array;
-                firstCallback.total_array = shuffle_value;
-                callback(null, firstCallback);
-            }
-        })
-    }, function(array_list, callback) {
-        // var final_result = {};
-        // final_result.user_word = array_list.available_array;
-        // final_result.available_word = array_list.rest_array;
-        // callback(null, final_result);
-        var available_letter_array = [];
-        var rest_letter_array = [];
-        for (var available_array_counter = 0; available_array_counter < array_list.available_array.length; available_array_counter++) {
-            var available_letter_obj = {};
-            available_letter_obj.charecter = array_list.available_array[available_array_counter].charecter;
-            available_letter_obj.value = array_list.available_array[available_array_counter].value;
-            available_letter_array.push(available_letter_obj);
-        }
-        for (var rest_array_counter = 0; rest_array_counter < array_list.rest_array.length; rest_array_counter++) {
-            var rest_letter_obj = {};
-            rest_letter_obj.charecter = array_list.rest_array[rest_array_counter].charecter;
-            rest_letter_obj.value = array_list.rest_array[rest_array_counter].value;
-            rest_letter_array.push(rest_letter_obj);
-        }
-        user.findOne({ 'auth_token': auth_token }, function(usr_err, usr_result) {
-            if (usr_err) {
-                //res.send(usr_err);
-                callback(usr_err, null);
-            } else {
-                if (usr_result) {
-                    //console.log(usr_result);
-                    var getUsrName = usr_result.name;
-                    var getUsrId = usr_result._id;
-                    var finalArray = [];
-                    var insertArray = [];
-                    var get_error = [];
-                    var game_room_entry = new game_room();
-                    game_room_entry.send_from = getUsrId;
-                    game_room_entry.language_name = language_name;
-                    game_room_entry.board_layout = board_layout;
-                    game_room_entry.game_mode = game_mode;
-                    game_room_entry.waiting_time = waiting_time;
-                    game_room_entry.number_of_player = no_of_players;
-                    game_room_entry.letter = rest_letter_array;
-                    game_room_entry.language_code = language_code;
-                    game_room_entry.save(function(save_err, save_result) {
-                        if (save_err) {
-                            //res.send(save_err);
-                            callback(save_err, null);
-                        } else {
-                            var game_id = save_result._id;
-                            async_node.map(myArray, function(singleId, callbackAsync) {
-                                //console.log(singleId);
-                                user.findOne({ '_id': singleId }, function(opponent_err, opponent_result) {
-                                    if (opponent_err) {
-                                        //res.send(opponent_err);
-                                        callback(opponent_err, null);
-                                    } else {
-                                        if (opponent_result.device_token) {
-                                            var deviceToken = opponent_result.device_token;
-                                            var FCM = require('fcm-node');
-                                            var fcm = new FCM("AAAAIvf_8fY:APA91bGyIz8sVZUzpT0IGqntP88iIP-z7OGFQ0dHKyMcYDvTfhrz_HFuLJ2TFJL8r8l9L6p0qZWTl-5I3vG7SWwABhm4k-LPokZSHLxcOgnwX4g1fi4kcUN7srub8IoqBh1uFgEQpcSC")
-                                            var notification_body = getUsrName + " send you a challenge for SmartFeud. Please accept the challenge.";
-                                            var message = {
-                                                to: deviceToken,
-                                                notification: {
-                                                    title: 'Smart Feud',
-                                                    body: notification_body
-                                                },
-                                                data: { //you can send only notification or only data(or include both) 
-                                                    message: 'Message - 3',
-                                                    game_id: game_id,
-                                                    no_of_players: no_of_players,
-                                                    board_layout: board_layout,
-                                                    language_name: language_name,
-                                                    sender_name: getUsrName,
-                                                    challenge_type: 'challenge'
-                                                }
-                                            }
-
-                                            fcm.send(message, function(err, response) {
-                                                if (err) {
-                                                    console.log(err);
-                                                    //callback();
-                                                } else {
-                                                    console.log(message.data);
-                                                    console.log("Successfully sent with challenge request: ", response);
-                                                    finalArray.push(singleId);
-                                                }
-                                                callbackAsync();
-                                            })
-                                        } else {
-                                            var error = {};
-                                            error.status = "error";
-                                            error.message = "device token is required.";
-                                            get_error.push(error);
-                                            callbackAsync();
-                                        }
-                                    }
-                                });
-                            }, function() {
-                                //console.log(finalArray);
-                                if (get_error.length == myArray.length) {
-                                    var result = {};
-                                    result.status = "error";
-                                    result.message = "Device token is required.";
-                                    //res.send(result);
-                                    callback(null, result);
+    //res.send(myArray);
+    user.findOne({ 'auth_token': auth_token }, function(usr_err, usr_result) {
+        if (usr_err) {
+            res.send(usr_err);
+        } else {
+            if (usr_result) {
+                //console.log(usr_result);
+                var getUsrName = usr_result.name;
+                var getUsrId = usr_result._id;
+                var finalArray = [];
+                var insertArray = [];
+                var get_error = [];
+                var game_room_entry = new game_room();
+                game_room_entry.send_from = getUsrId;
+                game_room_entry.language_name = language_name;
+                game_room_entry.board_layout = board_layout;
+                game_room_entry.game_mode = game_mode;
+                game_room_entry.waiting_time = waiting_time;
+                game_room_entry.number_of_player = no_of_players;
+                game_room_entry.save(function(save_err, save_result) {
+                    if (save_err) {
+                        res.send(save_err);
+                    } else {
+                        var game_id = save_result._id;
+                        async_node.map(myArray, function(singleId, callback) {
+                            //console.log(singleId);
+                            user.findOne({ '_id': singleId }, function(opponent_err, opponent_result) {
+                                if (opponent_err) {
+                                    res.send(opponent_err);
                                 } else {
-                                    if (finalArray.length > 0) {
-                                        for (var new_counter = 0; new_counter < finalArray.length; new_counter++) {
-                                            var individualArray = {};
-                                            individualArray.opponent_id = finalArray[new_counter];
-                                            individualArray.status = 0;
-                                            insertArray.push(individualArray);
-                                        }
-                                        game_room.findOne({ '_id': game_id }, function(game_err, game_result) {
-                                            if (game_err) {
-                                                //res.send(game_err);
-                                                callback(game_err, null);
-                                            } else {
-                                                game_result.send_to = insertArray;
-                                                game_result.save(function(game_save_err, game_save_result) {
-                                                    if (game_save_err) {
-                                                        //res.send(game_save_err);
-                                                        callback(game_save_err, null);
-                                                    } else {
-                                                        var user_rank_entry = new user_rank();
-                                                        user_rank_entry.game_id = game_id;
-                                                        user_rank_entry.user_id = getUsrId;
-                                                        user_rank_entry.current_letter = available_letter_array;
-                                                        user_rank_entry.rank = 1;
-                                                        user_rank_entry.save(function(rank_err, rank_result) {
-                                                            if (rank_err) {
-                                                                //res.send(rank_err);
-                                                                callback(rank_err, null);
-                                                            } else {
-                                                                var result = {};
-                                                                result.status = "success";
-                                                                result.message = "Invitation send successfully";
-                                                                result.game_id = game_id;
-                                                                result.board_lauout = {};
-                                                                //res.send(result);
-                                                                console.log(result);
-                                                                callback(null, result);
-                                                            }
-                                                        })
-                                                    }
-                                                })
+                                    //console.log(opponent_result);
+                                    if (opponent_result.device_token) {
+
+                                        var deviceToken = opponent_result.device_token;
+                                        //console.log(deviceToken);
+                                        var FCM = require('fcm-node');
+
+                                        var fcm = new FCM("AAAAIvf_8fY:APA91bGyIz8sVZUzpT0IGqntP88iIP-z7OGFQ0dHKyMcYDvTfhrz_HFuLJ2TFJL8r8l9L6p0qZWTl-5I3vG7SWwABhm4k-LPokZSHLxcOgnwX4g1fi4kcUN7srub8IoqBh1uFgEQpcSC")
+                                        var notification_body = getUsrName + " send you a challenge for SmartFeud. Please accept the challenge.";
+                                        var message = {
+                                            to: deviceToken,
+                                            notification: {
+                                                title: 'Smart Feud',
+                                                body: notification_body
+                                            },
+                                            data: { //you can send only notification or only data(or include both) 
+                                                message: 'Message - 3',
+                                                game_id: game_id,
+                                                no_of_players: no_of_players,
+                                                board_layout: board_layout,
+                                                language_name: language_name,
+                                                sender_name: getUsrName,
+                                                challenge_type: 'challenge'
                                             }
+                                        }
+
+                                        fcm.send(message, function(err, response) {
+                                            if (err) {
+                                                console.log(err);
+                                                //callback();
+                                            } else {
+                                                console.log("Successfully sent with challenge request: ", response);
+                                                finalArray.push(singleId);
+                                            }
+                                            callback();
                                         })
                                     } else {
-                                        var result = {};
-                                        result.status = "error";
-                                        result.message = "Invitation not send";
-                                        result.game_id = game_id;
-                                        result.board_lauout = {};
-                                        //res.send(result);
-                                        callback(null, result);
+                                        var error = {};
+                                        error.status = "error";
+                                        error.message = "device token is required.";
+                                        get_error.push(error);
+                                        callback();
                                     }
                                 }
-
                             });
-                        }
-                    })
+                        }, function() {
+                            //console.log(finalArray);
+                            if (get_error.length == myArray.length) {
+                                var result = {};
+                                result.status = "error";
+                                result.message = "Device token is required.";
+                                res.send(result);
+                            } else {
+                                if (finalArray.length > 0) {
+                                    for (var new_counter = 0; new_counter < finalArray.length; new_counter++) {
+                                        var individualArray = {};
+                                        individualArray.opponent_id = finalArray[new_counter];
+                                        individualArray.status = 0;
+                                        insertArray.push(individualArray);
+                                    }
+                                    game_room.findOne({ '_id': game_id }, function(game_err, game_result) {
+                                        if (game_err) {
+                                            res.send(game_err);
+                                        } else {
+                                            game_result.send_to = insertArray;
+                                            game_result.save(function(game_save_err, game_save_result) {
+                                                if (game_save_err) {
+                                                    res.send(game_save_err);
+                                                } else {
+                                                    var user_rank_entry = new user_rank();
+                                                    user_rank_entry.game_id = game_id;
+                                                    user_rank_entry.user_id = getUsrId;
+                                                    user_rank_entry.rank = 1;
+                                                    user_rank_entry.save(function(rank_err, rank_result) {
+                                                        if (rank_err) {
+                                                            res.send(rank_err);
+                                                        } else {
+                                                            var result = {};
+                                                            result.status = "success";
+                                                            result.message = "Invitation send successfully";
+                                                            result.game_id = game_id;
+                                                            result.board_lauout = {};
+                                                            res.send(result);
+                                                        }
+                                                    })
+                                                }
+                                            })
+                                        }
+                                    })
+                                } else {
+                                    var result = {};
+                                    result.status = "error";
+                                    result.message = "Invitation not send";
+                                    result.game_id = game_id;
+                                    result.board_lauout = {};
+                                    res.send(result);
+                                }
+                            }
 
-                } else {
-                    var result = {};
-                    result.status = "error";
-                    result.message = "User not exists";
-                    //res.send(result);
-                    callback(null, result);
-                }
+
+                        });
+                    }
+                })
+
+            } else {
+                var result = {};
+                result.status = "error";
+                result.message = "User not exists";
+                res.send(result);
             }
-        })
-    }], function(err, result) {
-        if (err) {
-            res.send(err);
-        } else {
-
-            res.json(result);
         }
-    });
-})
+    })
+
+    // var push_message = {};
+    // var deviceIds = [];
+    // deviceIds.push("dklxQ2ZWOW8:APA91bHGbNxICU9-f2sLKkhuZWJ31mDa-FdsIzsznapV0s2WlWjYGyu5gk_qSSqmrXIUU7RccmM29iXp_ZfPISiwes1g7qOSXc4YVCwdOshetryGi6poPMB3LDpipYFO_XeOCQiVUxPJ");
+    // push_message.fcm_server_key = "AAAAVQ4bC4A:APA91bGprg3V-T-Qfbf_SfosJSyzGv4hH1UqrOpAZz6fr_onDEsoIaLBkCOKTz231ziXVmZRMJnE5le7T_-izX7c5o8SnHatF2hppfZUTcfkeohAk9WGIlxQtRFOj1bJ3YS3cxkoyfPs";
+    // push_message.deviceIds = deviceIds;
+    // push_message.message = "Sample Message";
+    // PushNotification.sendFCM(push_message);
+    // var result = {};
+    // result.status = "error";
+    // result.message = "Device token is required to send message";
+    // res.send(result);
 
 
+
+    //res.send("THIS IS SAMPLE");
+});
 //----------------------- Function to accept the challenge invitation ----------------------------------//
 router.post('/accept_challenge', function(req, res, next) {
     var auth_token = req.body.auth_token;
@@ -933,26 +882,11 @@ router.post('/accept_challenge', function(req, res, next) {
             res.send(usr_err);
         } else {
             if (usr_data) {
-                var usrId = usr_data._id; // The ID of the USer who accept the challenge
+                var usrId = usr_data._id;
                 game_room.findOne({ '_id': game_id }).populate('send_from').exec(function(game_err, game_result) {
                     if (game_err) {
                         res.send(game_err);
                     } else {
-
-                        var shuffle_value = game_result.letter;
-                        //shuffle_value = shuffle(shuffle_value);
-                        var new_generate_array = [];
-                        var rest_array = [];
-                        for (var counter = 0; counter < 7; counter++) {
-                            new_generate_array.push(shuffle_value[counter]);
-                        }
-                        for (var rest_counter = 0; rest_counter < shuffle_value.length; rest_counter++) {
-                            if (new_generate_array.indexOf(shuffle_value[rest_counter]) == -1) {
-                                rest_array.push(shuffle_value[rest_counter]);
-                            }
-                        }
-
-                        var opponent_turn = game_result.next_turn;
                         var getUsrName = game_result.send_from.name;
                         var no_of_players = game_result.number_of_player;
                         var board_layout = game_result.board_layout;
@@ -966,12 +900,9 @@ router.post('/accept_challenge', function(req, res, next) {
                             var opponent_id = game_result.send_to[counter].opponent_id;
 
                             if (String(opponent_id) == String(usrId)) {
-                                var next_turn_obj = {};
                                 new_opponent_object.opponent_id = game_result.send_to[counter].opponent_id;
                                 new_opponent_object._id = game_result.send_to[counter]._id;
                                 new_opponent_object.status = 1;
-                                next_turn_obj.next_turn_id = game_result.send_to[counter].opponent_id;
-                                opponent_turn.push(next_turn_obj);
                                 counter_value++;
                             } else {
                                 NotifyUser.push(opponent_id);
@@ -984,11 +915,8 @@ router.post('/accept_challenge', function(req, res, next) {
                         }
                         game_result.send_to = new_opponent_array;
                         if (parseInt(counter) == parseInt(game_result.number_of_player)) {
-                            game_result.game_status = 1;
+                            game_result.status = 1;
                         }
-                        game_result.current_turn = game_result.send_from._id;
-                        game_result.next_turn = opponent_turn;
-                        game_result.letter = rest_array;
                         game_result.save(function(updt_err, updt_result) {
                             if (updt_err) {
                                 res.send(updt_err);
@@ -1002,7 +930,6 @@ router.post('/accept_challenge', function(req, res, next) {
                                         user_rank_entry.game_id = game_id;
                                         user_rank_entry.user_id = usrId;
                                         user_rank_entry.rank = new_rank;
-                                        user_rank_entry.current_letter = new_generate_array;
                                         user_rank_entry.save(function(save_rank_err, save_rank_result) {
                                             if (save_rank_err) {
                                                 res.send(save_rank_err);
@@ -1040,10 +967,8 @@ router.post('/accept_challenge', function(req, res, next) {
                                                                             console.log(err);
                                                                             show_error.push(singleId);
                                                                         } else {
-                                                                            console.log(message.data);
                                                                             console.log("Successfully sent with accept response: ", response);
                                                                         }
-
                                                                         callbackNext();
                                                                     })
                                                                 } else {
@@ -1055,7 +980,6 @@ router.post('/accept_challenge', function(req, res, next) {
                                                         }
                                                     })
                                                 }, function() {
-                                                    console.log(show_error);
                                                     if (show_error.length > 0) {
                                                         if (NotifyUser.length == show_error.length) {
                                                             var result = {};
@@ -1066,14 +990,12 @@ router.post('/accept_challenge', function(req, res, next) {
                                                             var result = {};
                                                             result.status = "success";
                                                             result.message = "Invitation accepted successfully";
-                                                            console.log(result, "With error");
                                                             res.json(result);
                                                         }
                                                     } else {
                                                         var result = {};
                                                         result.status = "success";
                                                         result.message = "Invitation accepted successfully";
-                                                        console.log(result, "Not error");
                                                         res.json(result);
                                                     }
                                                 });
@@ -1117,7 +1039,7 @@ router.post('/declined_challenge', function(req, res, next) {
                     res.send(game_err);
                 } else {
                     //console.log(game_result);
-                    var game_id = game_id;
+                    var game_id = game_result._id;
                     var no_of_players = game_result.number_of_player;
                     var board_layout = game_result.board_layout;
                     var language_name = game_result.language_name;
@@ -1972,7 +1894,72 @@ router.post('/insertGame', function(req, res, next) {
             }
         }
     });
+    // test_game.findOne({ 'sender_id': userId }).elemMatch("receive_id", { "opponent_id": opponentId, "status": { $ne: 2 } }).exec(function(get_err, get_result) {
+    //     if (get_err) {
+    //         res.send(get_err);
+    //     } else {
+    //         //res.send(get_result);
+    //         if (get_result) {
+    //             var result = {};
+    //             result.status = 'error';
+    //             result.message = 'You have allready send the notification to this friend.';
+    //             res.send(result);
+    //         } else {
 
+    //             var get_receive = get_result.receive_id;
+    //             get_receive.push(insertArray);
+    //             get_result.receive_id = get_receive;
+    //             get_result.save(function(updt_err, updt_result) {
+    //                 if (updt_err) {
+    //                     res.send(updt_err);
+    //                 } else {
+    //                     var result = {};
+    //                     result.status = 'success';
+    //                     result.message = 'Successfully updated';
+    //                     res.json(result);
+    //                 }
+    //             })
+    //         }
+    //     }
+    // })
+
+
+    // test_game.findOne({ 'sender_id': userId }, function(get_err, get_result) {
+    //     if (get_err) {
+    //         res.send(get_err);
+    //     } else {
+    //         if (get_result) {
+    //             var get_receive = get_result.receive_id;
+    //             get_receive.push(insertArray);
+    //             get_result.receive_id = get_receive;
+    //             get_result.save(function(updt_err, updt_result) {
+    //                 if (updt_err) {
+    //                     res.send(updt_err);
+    //                 } else {
+    //                     var result = {};
+    //                     result.status = 'success';
+    //                     result.message = 'Successfully updated';
+    //                     res.json(result);
+    //                 }
+    //             })
+    //         } else {
+    //             var insert_test_game = new test_game();
+    //             insert_test_game.sender_id = userId;
+    //             insert_test_game.receive_id = insertArray;
+    //             //res.send(insertArray);
+    //             insert_test_game.save(function(save_err, save_result) {
+    //                 if (save_err) {
+    //                     res.send(save_err);
+    //                 } else {
+    //                     var result = {};
+    //                     result.status = 'success';
+    //                     result.message = 'Successfully inserted';
+    //                     res.json(result);
+    //                 }
+    //             })
+    //         }
+    //     }
+    // })
 
 })
 router.post('/updtprofileimage', function(req, res, next) {
@@ -2000,107 +1987,90 @@ router.post('/updtprofileimage', function(req, res, next) {
         }
     });
 })
-router.post('/GameList', function(req, res, next) {
-    var auth_token = req.body.auth_token;
-    user.findOne({ 'auth_token': auth_token }, function(usr_err, usr_result) {
-        if (usr_err) {
-            callback(usr_err, null);
-        } else {
-            if (usr_result) {
-                user_rank.find({ 'user_id': usr_result._id }).populate('game_id').exec(function(current_game_err, current_game_result) {
-                    if (current_game_err) {
-                        res.send(current_game_err);
-                    } else {
-                        if (current_game_result.length > 0) {
-                            var usrId = usr_result._id;
-                            var current_games = [];
-                            async_node.map(current_game_result, function(singleGameId, callbackGame) {
-                                var user_details = [];
-                                var current_games_obj = {};
-                                user_rank.find({ 'game_id': singleGameId.game_id._id }).populate('user_id').exec(function(usr_details_err, usr_details_result) {
-                                    if (usr_details_err) {
-                                        console.log(usr_details_err);
-                                        callbackGame();
-                                    } else {
-                                        console.log(usr_details_result);
-                                        if (singleGameId.game_id.game_status == 0) {
-                                            current_games_obj.gameStatus = "Pending";
-                                        }
-                                        if (singleGameId.game_id.game_status == 1) {
-                                            current_games_obj.gameStatus = "Active";
-                                        }
-                                        if (singleGameId.game_id.game_status == 3) {
-                                            current_games_obj.gameStatus = "Finished";
-                                        }
-                                        current_games_obj.gameId = singleGameId.game_id._id;
-                                        current_games_obj.board_layout = singleGameId.game_id.board_layout;
-                                        current_games_obj.game_language = singleGameId.game_id.language_name;
-                                        current_games_obj.nextturn = singleGameId.game_id.current_turn;
-                                        current_games_obj.number_of_players = singleGameId.game_id.number_of_player;
-                                        for (var usr_counter = 0; usr_counter < usr_details_result.length; usr_counter++) {
-                                            var usr_details_obj = {};
-                                            usr_details_obj.user_id = usr_details_result[usr_counter].user_id._id;
-                                            usr_details_obj.user_name = usr_details_result[usr_counter].user_id.name;
-                                            if (usr_details_result[usr_counter].user_id.image) {
-                                                if (url_regexp.test(usr_details_result[usr_counter].user_id.image)) {
-                                                    usr_details_obj.user_profilepic = usr_details_result[usr_counter].user_id.image;
-                                                } else {
-                                                    usr_details_obj.user_profilepic = live_url + 'uploads/' + usr_details_result[usr_counter].user_id.image;
-                                                }
-                                            } else {
-                                                usr_details_obj.user_profilepic = live_url + 'uploads/no-user.png';
-                                            }
-                                            usr_details_obj.skill_rating = usr_details_result[usr_counter].score;
-                                            usr_details_obj.last_gameplayed = 10;
-                                            usr_details_obj.wins = 10;
-                                            usr_details_obj.draws = 10;
-                                            usr_details_obj.losts = 10;
-                                            usr_details_obj.current_letters = usr_details_result[usr_counter].current_letter;
-                                            user_details.push(usr_details_obj);
-                                        }
-                                        current_games_obj.users = user_details;
-                                        current_games_obj.boardlayout_position = singleGameId.game_id.boardlayout_position;
-                                        current_games_obj.board_letters = singleGameId.game_id.board_letters;
-                                        current_games.push(current_games_obj);
-                                    }
-                                    callbackGame();
-                                })
-                            }, function() {
-                                var result = {};
-                                result.status = "success";
-                                result.user_id = usrId;
-                                result.current_games = current_games;
-                                res.json(result);
-                            });
-                        } else {
-                            var result = {};
-                            result.status = "success";
-                            result.user_id = usrId;
-                            result.current_games = [];
-                            res.json(result);
-                        }
-                    }
-                })
-            } else {
-                var result = {};
-                result.status = 'error';
-                result.message = 'User does not exists';
-                res.json(result);
-                //callback(null, result);
-            }
-        }
-    });
+router.post('/getImageDetails', function(req, res, next) {
 
-});
-// router.get('/send_socket', function(req, res, next) {
+    // var data = req.body.profileImage;
+    // var myBuffer = new Buffer(data.length);
+    // for (var i = 0; i < data.length; i++) {
+    //       myBuffer[i] = data[i];
+    // }
+    // //var d=new Date().valueOf();
+    // var filename = 'image.jpg';
+    // fs.writeFile(filename, myBuffer, function(err) {
+    //     if(err) {
+    //         console.log(err);
+    //         var result = {};
+    //         result.status = "error";
+    //         result.message = "Not Uploaded yet";
 
-//     io.emit('updt_game', { 'auth_token': 123456 }, function(callback) {
+    //     } else {
+    //         console.log("The file was saved!");
+    //         var result = {};
+    //         result.status = "success";
+    //         result.message = "Uploaded yet";
+    //     }
+    //     res.send(result);
+    // });
 
-//     });
-//     io.on('updt_complete', function(data) {
-//         res.send(data);
-//     })
-// })
+    // console.log(req.headers);
+    // var form = multiparty.Form();
+
+    // form.parse(req, function(err, fields, files) {
+
+    //         console.log("=========================>>>",err);
+
+
+    //     });
+
+
+
+
+
+
+    // console.log(err,fields,files);
+    //   if (err) {
+    //     console.log(err);
+    //     // return res.json(Utility.output(err, 'ERROR'));
+    //   } else {
+    //     var extension = ((/[.]/.exec(files.profileImage[0].originalFilename)) ? /[^.]+$/.exec(files.profileImage[0].originalFilename) : '');
+    //   if (extension == "jpg" || extension == "jpeg" || extension == "png" || extension == "gif") {
+    //     fs.readFile(files.profileImage[0].path, function(err, data) {
+    //       var fileNamex = newContact._id + '.' + extension;
+    //       var newPath =  './uploads/' + fileNamex;
+    //       contact_image_global = fileNamex;
+    //       fs.writeFile(newPath, data, function(err) {
+    //         if (err) {
+    //             console.log("upload err",err);
+    //         } else {
+    //         console.log("uploaded-------->",newPath);
+    //         }
+    //       });
+    //     });
+    //   } else {
+    //     console.log("ext",extension);
+    //     res.send('Only image file[*.jpg/*.jpeg/*.png/*.gif] will be accepted');
+    //   }
+
+    //   }
+
+
+
+
+
+    // console.log(req.body);
+
+    //     console.log("=====================>",req.rawBody);
+    //     fs.writeFile('abc.wav', req.rawBody, 'binary', function(err){
+    //         console.log(err);
+    //     if (err) throw err;
+    //     });
+    //     var result = {};
+    //     result.status = "error";
+    //     result.message = "Uploaded yet";
+    //     res.send(result);
+
+
+})
 module.exports = router;
 
 function randomString(length, chars) {
