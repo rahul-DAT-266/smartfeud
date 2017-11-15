@@ -14,12 +14,16 @@ module.exports = function(io) {
         // })
         socket.on('game_list', function(data) {
             var auth_token = data.auth_token;
-            user.findOne({ 'auth_token': auth_token }, function(usr_err, usr_result) {
+            user.findOne({
+                'auth_token': auth_token
+            }, function(usr_err, usr_result) {
                 if (usr_err) {
                     callback(usr_err, null);
                 } else {
                     if (usr_result) {
-                        user_rank.find({ 'user_id': usr_result._id }).populate('game_id').exec(function(current_game_err, current_game_result) {
+                        user_rank.find({
+                            'user_id': usr_result._id
+                        }).populate('game_id').exec(function(current_game_err, current_game_result) {
                             if (current_game_err) {
                                 res.send(current_game_err);
                             } else {
@@ -29,7 +33,9 @@ module.exports = function(io) {
                                     async_node.map(current_game_result, function(singleGameId, callbackGame) {
                                         var user_details = [];
                                         var current_games_obj = {};
-                                        user_rank.find({ 'game_id': singleGameId.game_id._id }).populate('user_id').exec(function(usr_details_err, usr_details_result) {
+                                        user_rank.find({
+                                            'game_id': singleGameId.game_id._id
+                                        }).populate('user_id').exec(function(usr_details_err, usr_details_result) {
                                             if (usr_details_err) {
                                                 //console.log(usr_details_err);
                                                 callbackGame();
@@ -121,14 +127,18 @@ module.exports = function(io) {
             }
             var language_code = 'ENG';
             var checkWordExist = [];
-            user.findOne({ 'auth_token': auth_token }, function(usr_err, usr_result) {
+            user.findOne({
+                'auth_token': auth_token
+            }, function(usr_err, usr_result) {
                 if (usr_err) {
                     socket.emit('turn_response', usr_err);
                 } else {
                     if (usr_result) {
                         var userId = usr_result._id;
                         async_node.map(played_words, function(singleId, callbackNext) {
-                            dictionary.findOne({ 'language_code': language_code }, function(get_err, get_result) {
+                            dictionary.findOne({
+                                'language_code': language_code
+                            }, function(get_err, get_result) {
                                 if (get_err) {
                                     //res.send(get_err);
                                     callbackNext();
@@ -160,7 +170,9 @@ module.exports = function(io) {
                                     unused_letter_array.push(unused_letter_obj);
                                     total_letter_array.push(unused_letter_obj)
                                 }
-                                GameModel.findOne({ '_id': gameId }, function(exist_err, exist_result) {
+                                GameModel.findOne({
+                                    '_id': gameId
+                                }, function(exist_err, exist_result) {
                                     if (exist_err) {
                                         //socket.emit('turn_response', exist_err);
                                         socket.to(gameId).emit('turn_response', exist_err);
@@ -220,7 +232,10 @@ module.exports = function(io) {
                                                     //socket.emit('turn_response', updt_game_err);
                                                     socket.to(gameId).emit('turn_response', updt_game_err);
                                                 } else {
-                                                    user_rank.findOne({ 'game_id': gameId, 'user_id': userId }, function(rank_err, rank_result) {
+                                                    user_rank.findOne({
+                                                        'game_id': gameId,
+                                                        'user_id': userId
+                                                    }, function(rank_err, rank_result) {
                                                         if (rank_err) {
                                                             //socket.emit('turn_response', rank_err);
                                                             socket.to(gameId).emit('turn_response', rank_err);
@@ -280,9 +295,13 @@ module.exports = function(io) {
 
         });
         socket.on('join_game', function(data) {
-            var user_id = data.userId;
-            var gameId = data.gameId;
-            socket.join(gameId);
+
+            for (var ix = 0; ix < onlineUsers[data.user_id.toString()].length; ix++) {
+                if (io.sockets.adapter.sids[onlineUsers[data.user_id.toString()][ix]]) {
+                    var socketInfo = io.sockets.connected[onlineUsers[data.user_id.toString()][ix]];
+                    socketInfo.join(data.game_id.toString());
+                }
+            }
         })
         socket.on('updt_game', function(data) {
             console.log(data);

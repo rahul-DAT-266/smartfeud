@@ -42,15 +42,15 @@ function UtlitySocketFunction() {
      */
     function mappingOnlineUsers(user, socket, io) {
 
-        onlineSocket[socket.id] = {
-            userId: user._id,
+        onlineSocket[socket.id.toString()] = {
+            userId: user._id.toString(),
             auth_token: user.auth_token
         }
 
-        if (onlineUsers.indexOf(user._id) !== -1) {
-            onlineUsers[user._id].push(socket.id)
+        if (onlineUsers.indexOf(user._id.toString()) !== -1) {
+            onlineUsers[user._id.toString()].push(socket.id.toString())
         } else {
-            onlineUsers[user._id] = [socket.id];
+            onlineUsers[user._id.toString()] = [socket.id.toString()];
         }
         joinInExistingGameRoom(user, socket, io);
     }

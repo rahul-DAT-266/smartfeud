@@ -55,7 +55,13 @@ router.post('/userRegistration', function(req, res, next) {
         result.message = 'error';
         result.error = error_section;
     } else {
-        user.find({ $or: [{ 'name': userName }, { 'email': email }] }, function(usr_err, usr_result) {
+        user.find({
+            $or: [{
+                'name': userName
+            }, {
+                'email': email
+            }]
+        }, function(usr_err, usr_result) {
             if (usr_err) {
                 res.send(usr_err);
             } else {
@@ -86,43 +92,96 @@ router.post('/userRegistration', function(req, res, next) {
 });
 //---------------------------- Function for user Singin ----------------------------------//
 router.post('/login', function(req, res, next) {
-    //console.log("TEST");
-    var login_type = req.body.login_type;
-    var device_token = req.body.device_token;
-    var response = {};
-    if (login_type == 2) {
-        var username = req.body.username;
-        var password = req.body.password;
-        user.findOne({ 'name': username }, function(usr_err, usr_result) {
-            if (usr_err) {
-                res.send(usr_err);
-            } else {
-                if (usr_result) {
-                    var get_result = usr_result;
-                    var new_usr = new user();
-                    new_usr.encryptPassword(password);
-                    if (!get_result.validPassword(password)) {
-                        response.status = "error";
-                        response.message = "Password does not match";
-                        res.json(response);
-                    } else {
-                        var getTime = new Date().getTime();
-                        var auth_token = get_result._id + getTime;
-                        var usr_data = {};
-                        usr_data.user_id = get_result._id;
-                        usr_data.username = get_result.name;
-                        usr_data.email = get_result.email;
-                        if (get_result.image) {
-                            if (url_regexp.test(get_result.image)) {
-                                usr_data.image = get_result.image;
+        //console.log("TEST");
+        var login_type = req.body.login_type;
+        var device_token = req.body.device_token;
+        var response = {};
+        if (login_type == 2) {
+            var username = req.body.username;
+            var password = req.body.password;
+            user.findOne({
+                'name': username
+            }, function(usr_err, usr_result) {
+                if (usr_err) {
+                    res.send(usr_err);
+                } else {
+                    if (usr_result) {
+                        var get_result = usr_result;
+                        var new_usr = new user();
+                        new_usr.encryptPassword(password);
+                        if (!get_result.validPassword(password)) {
+                            response.status = "error";
+                            response.message = "Password does not match";
+                            res.json(response);
+                        } else {
+                            var getTime = new Date().getTime();
+                            var auth_token = get_result._id + getTime;
+                            var usr_data = {};
+                            usr_data.user_id = get_result._id;
+                            usr_data.username = get_result.name;
+                            usr_data.email = get_result.email;
+                            if (get_result.image) {
+                                if (url_regexp.test(get_result.image)) {
+                                    usr_data.image = get_result.image;
+                                } else {
+                                    usr_data.image = profile_image_url + get_result.image;
+                                }
+
                             } else {
-                                usr_data.image = profile_image_url + get_result.image;
+                                usr_data.image = live_url + 'uploads/no-user.png';
+                            }
+                            //usr_data.image = live_url+'uploads/no-user.png';
+                            usr_result.auth_token = auth_token;
+                            usr_result.device_token = device_token;
+                            usr_result.save(function(updt_err, updt_result) {
+                                if (updt_err) {
+                                    res.send(updt_err);
+                                } else {
+                                    response.status = "success";
+                                    response.message = "Logged in successfully!";
+                                    response.auth_token = auth_token;
+                                    response.data = usr_data;
+                                    //res.send("TEST AGAIN");
+                                    res.json(response);
+                                }
+                            })
+
+                        }
+                    } else {
+                        response.status = "error";
+                        response.message = "User does not exist!";
+                        res.json(response);
+                    }
+                }
+            })
+        }
+        if ((login_type == 3) || (login_type == 4)) {
+            var social_id = req.body.social_id;
+            var username = req.body.name;
+            var image = req.body.image;
+            user.findOne({
+                '_login_type': login_type,
+                'social_id': social_id
+            }, function(usr_err, usr_result) {
+                if (usr_err) {
+                    res.send(usr_err);
+                } else {
+                    if (usr_result) {
+                        var getTime = new Date().getTime();
+                        var auth_token = usr_result._id + getTime;
+                        var usr_data = {};
+                        usr_data.user_id = usr_result._id;
+                        usr_data.username = usr_result.name;
+                        if (usr_result.image) {
+                            if (url_regexp.test(usr_result.image)) {
+                                usr_data.image = usr_result.image;
+                            } else {
+                                usr_data.image = profile_image_url + usr_result.image;
                             }
 
                         } else {
                             usr_data.image = live_url + 'uploads/no-user.png';
                         }
-                        //usr_data.image = live_url+'uploads/no-user.png';
                         usr_result.auth_token = auth_token;
                         usr_result.device_token = device_token;
                         usr_result.save(function(updt_err, updt_result) {
@@ -133,123 +192,79 @@ router.post('/login', function(req, res, next) {
                                 response.message = "Logged in successfully!";
                                 response.auth_token = auth_token;
                                 response.data = usr_data;
-                                //res.send("TEST AGAIN");
                                 res.json(response);
                             }
                         })
-
-                    }
-                } else {
-                    response.status = "error";
-                    response.message = "User does not exist!";
-                    res.json(response);
-                }
-            }
-        })
-    }
-    if ((login_type == 3) || (login_type == 4)) {
-        var social_id = req.body.social_id;
-        var username = req.body.name;
-        var image = req.body.image;
-        user.findOne({ '_login_type': login_type, 'social_id': social_id }, function(usr_err, usr_result) {
-            if (usr_err) {
-                res.send(usr_err);
-            } else {
-                if (usr_result) {
-                    var getTime = new Date().getTime();
-                    var auth_token = usr_result._id + getTime;
-                    var usr_data = {};
-                    usr_data.user_id = usr_result._id;
-                    usr_data.username = usr_result.name;
-                    if (usr_result.image) {
-                        if (url_regexp.test(usr_result.image)) {
-                            usr_data.image = usr_result.image;
-                        } else {
-                            usr_data.image = profile_image_url + usr_result.image;
-                        }
-
                     } else {
-                        usr_data.image = live_url + 'uploads/no-user.png';
-                    }
-                    usr_result.auth_token = auth_token;
-                    usr_result.device_token = device_token;
-                    usr_result.save(function(updt_err, updt_result) {
-                        if (updt_err) {
-                            res.send(updt_err);
-                        } else {
-                            response.status = "success";
-                            response.message = "Logged in successfully!";
-                            response.auth_token = auth_token;
-                            response.data = usr_data;
-                            res.json(response);
-                        }
-                    })
-                } else {
 
-                    var new_usr = new user();
-                    new_usr._login_type = login_type;
-                    new_usr.social_id = social_id;
-                    new_usr.name = username;
-                    new_usr.image = image;
-                    //res.send("New Entry");
-                    new_usr.save(function(insert_err, insert_result) {
-                        //res.send(insert_err);
-                        if (insert_err) {
-                            res.send(insert_err);
-                        } else {
+                        var new_usr = new user();
+                        new_usr._login_type = login_type;
+                        new_usr.social_id = social_id;
+                        new_usr.name = username;
+                        new_usr.image = image;
+                        //res.send("New Entry");
+                        new_usr.save(function(insert_err, insert_result) {
+                            //res.send(insert_err);
+                            if (insert_err) {
+                                res.send(insert_err);
+                            } else {
 
 
-                            user.findOne({ '_id': insert_result._id }, function(get_err, get_result) {
-                                if (get_err) {
-                                    res.send(get_err);
-                                } else {
-                                    //res.send(get_result);
-                                    var usr_data = {};
-                                    usr_data.user_id = get_result._id;
-                                    usr_data.username = get_result.name;
-                                    if (get_result.image) {
-                                        if (url_regexp.test(get_result.image)) {
-                                            usr_data.image = get_result.image;
-                                        } else {
-                                            usr_data.image = profile_image_url + get_result.image;
-                                        }
-
+                                user.findOne({
+                                    '_id': insert_result._id
+                                }, function(get_err, get_result) {
+                                    if (get_err) {
+                                        res.send(get_err);
                                     } else {
-                                        usr_data.image = live_url + 'uploads/no-user.png';
-                                    }
-                                    var getTime = new Date().getTime();
-                                    var new_auth_token = get_result._id + getTime;
-                                    get_result.auth_token = new_auth_token;
-                                    get_result.device_token = device_token;
-                                    //res.send(usr_result);
-                                    get_result.save(function(updt_err, updt_result) {
-                                        if (updt_err) {
-                                            res.send(updt_err);
-                                        } else {
-                                            response.status = "success";
-                                            response.message = "Logged in successfully!";
-                                            response.auth_token = new_auth_token;
-                                            response.data = usr_data;
-                                            res.json(response);
-                                        }
-                                    })
-                                }
-                            })
-                        }
+                                        //res.send(get_result);
+                                        var usr_data = {};
+                                        usr_data.user_id = get_result._id;
+                                        usr_data.username = get_result.name;
+                                        if (get_result.image) {
+                                            if (url_regexp.test(get_result.image)) {
+                                                usr_data.image = get_result.image;
+                                            } else {
+                                                usr_data.image = profile_image_url + get_result.image;
+                                            }
 
-                    })
+                                        } else {
+                                            usr_data.image = live_url + 'uploads/no-user.png';
+                                        }
+                                        var getTime = new Date().getTime();
+                                        var new_auth_token = get_result._id + getTime;
+                                        get_result.auth_token = new_auth_token;
+                                        get_result.device_token = device_token;
+                                        //res.send(usr_result);
+                                        get_result.save(function(updt_err, updt_result) {
+                                            if (updt_err) {
+                                                res.send(updt_err);
+                                            } else {
+                                                response.status = "success";
+                                                response.message = "Logged in successfully!";
+                                                response.auth_token = new_auth_token;
+                                                response.data = usr_data;
+                                                res.json(response);
+                                            }
+                                        })
+                                    }
+                                })
+                            }
+
+                        })
+                    }
                 }
-            }
-        })
-    }
-})
-//----------------------------- Function for logout section ----------------------------------//
+            })
+        }
+    })
+    //----------------------------- Function for logout section ----------------------------------//
 router.post('/logout', function(req, res, next) {
     //console.log("Logout Section");
     var result = {};
     var auth_token = req.body.auth_token;
     //res.send(auth_token);
-    user.findOne({ 'auth_token': auth_token }, function(get_err, get_result) {
+    user.findOne({
+        'auth_token': auth_token
+    }, function(get_err, get_result) {
         if (get_err) {
             res.send(get_err);
         } else {
@@ -279,7 +294,9 @@ router.post('/logout', function(req, res, next) {
 router.post('/getProfile', function(req, res, next) {
     //res.send(req.headers);
     var auth_token = req.body.auth_token;
-    user.findOne({ 'auth_token': auth_token }, function(get_err, get_result) {
+    user.findOne({
+        'auth_token': auth_token
+    }, function(get_err, get_result) {
         if (get_err) {
             res.send(get_err);
         } else {
@@ -350,7 +367,12 @@ router.post('/updateProfile', function(req, res, next) {
     var return_user = {};
     if (auth_token != '') {
         if (username != '') {
-            user.findOne({ 'name': username, 'auth_token': { $ne: auth_token } }, function(exist_err, exist_result) {
+            user.findOne({
+                'name': username,
+                'auth_token': {
+                    $ne: auth_token
+                }
+            }, function(exist_err, exist_result) {
                 if (exist_err) {
                     res.send(exist_err);
                 } else {
@@ -360,7 +382,9 @@ router.post('/updateProfile', function(req, res, next) {
                         result.message = "This username allready exists";
                         res.json(result);
                     } else {
-                        user.findOne({ 'auth_token': auth_token }, function(usr_err, usr_result) {
+                        user.findOne({
+                            'auth_token': auth_token
+                        }, function(usr_err, usr_result) {
                             if (usr_err) {
                                 res.send(usr_err);
                             } else {
@@ -448,7 +472,9 @@ router.post('/updateProfile', function(req, res, next) {
                 }
             });
         } else {
-            user.findOne({ 'auth_token': auth_token }, function(usr_err, usr_result) {
+            user.findOne({
+                'auth_token': auth_token
+            }, function(usr_err, usr_result) {
                 if (usr_err) {
                     res.send(usr_err);
                 } else {
@@ -543,7 +569,9 @@ router.post('/updateProfile', function(req, res, next) {
 router.post('/forgotPasswordEmail', function(req, res, next) {
     var email = req.body.email;
     var random_code = randomString(10, '#aA');
-    user.findOne({ 'email': email }, function(get_err, get_result) {
+    user.findOne({
+        'email': email
+    }, function(get_err, get_result) {
         if (get_err) {
             res.send(get_err);
         } else {
@@ -593,7 +621,9 @@ router.post('/forgotPasswordEmail', function(req, res, next) {
 router.post('/checkVerificationCode', function(req, res, next) {
     var result = {};
     var verification_code = req.body.verification_code;
-    user.findOne({ 'verification_code': verification_code }, function(get_err, get_result) {
+    user.findOne({
+        'verification_code': verification_code
+    }, function(get_err, get_result) {
         if (get_err) {
             res.send(get_err);
         } else {
@@ -624,7 +654,9 @@ router.post('/resetPassword', function(req, res, next) {
     var result = {};
     var password = req.body.password;
     var user_id = req.body.user_id;
-    user.findOne({ '_id': user_id }, function(get_err, get_result) {
+    user.findOne({
+        '_id': user_id
+    }, function(get_err, get_result) {
         if (get_err) {
             res.send(get_err);
         } else {
@@ -682,7 +714,9 @@ router.post('/checkWord', function(req, res, next) {
     var language_code = req.body.language_code;
     var word = req.body.word;
     //res.send("TEST");
-    dictionary.findOne({ 'language_code': language_code }, function(get_err, get_result) {
+    dictionary.findOne({
+        'language_code': language_code
+    }, function(get_err, get_result) {
 
         if (get_err) {
             res.send(get_err);
@@ -718,7 +752,9 @@ router.post('/send_challenge', function(req, res, next) {
     }
     async_node.waterfall([function(callback) {
         var firstCallback = {};
-        game_word.findOne({ 'language_code': language_code }, function(shuffle_err, shuffle_result) {
+        game_word.findOne({
+            'language_code': language_code
+        }, function(shuffle_err, shuffle_result) {
             if (shuffle_err) {
                 callback(shuffle_err, null);
             } else {
@@ -760,7 +796,9 @@ router.post('/send_challenge', function(req, res, next) {
             rest_letter_obj.value = array_list.rest_array[rest_array_counter].value;
             rest_letter_array.push(rest_letter_obj);
         }
-        user.findOne({ 'auth_token': auth_token }, function(usr_err, usr_result) {
+        user.findOne({
+            'auth_token': auth_token
+        }, function(usr_err, usr_result) {
             if (usr_err) {
                 //res.send(usr_err);
                 callback(usr_err, null);
@@ -789,7 +827,9 @@ router.post('/send_challenge', function(req, res, next) {
                             var game_id = save_result._id;
                             async_node.map(myArray, function(singleId, callbackAsync) {
                                 //console.log(singleId);
-                                user.findOne({ '_id': singleId }, function(opponent_err, opponent_result) {
+                                user.findOne({
+                                    '_id': singleId
+                                }, function(opponent_err, opponent_result) {
                                     if (opponent_err) {
                                         //res.send(opponent_err);
                                         callback(opponent_err, null);
@@ -852,7 +892,9 @@ router.post('/send_challenge', function(req, res, next) {
                                             individualArray.status = 0;
                                             insertArray.push(individualArray);
                                         }
-                                        game_room.findOne({ '_id': game_id }, function(game_err, game_result) {
+                                        game_room.findOne({
+                                            '_id': game_id
+                                        }, function(game_err, game_result) {
                                             if (game_err) {
                                                 //res.send(game_err);
                                                 callback(game_err, null);
@@ -880,6 +922,10 @@ router.post('/send_challenge', function(req, res, next) {
                                                                 result.board_lauout = {};
                                                                 //res.send(result);
                                                                 console.log(result);
+                                                                socket.emit('join_game', {
+                                                                    game_id: game_id,
+                                                                    user_id: usr_result._id
+                                                                })
                                                                 callback(null, result);
                                                             }
                                                         })
@@ -928,13 +974,17 @@ router.post('/accept_challenge', function(req, res, next) {
     var game_id = req.body.game_id;
     var NotifyUser = [];
     var show_error = [];
-    user.findOne({ 'auth_token': auth_token }, function(usr_err, usr_data) {
+    user.findOne({
+        'auth_token': auth_token
+    }, function(usr_err, usr_data) {
         if (usr_err) {
             res.send(usr_err);
         } else {
             if (usr_data) {
                 var usrId = usr_data._id; // The ID of the USer who accept the challenge
-                game_room.findOne({ '_id': game_id }).populate('send_from').exec(function(game_err, game_result) {
+                game_room.findOne({
+                    '_id': game_id
+                }).populate('send_from').exec(function(game_err, game_result) {
                     if (game_err) {
                         res.send(game_err);
                     } else {
@@ -993,7 +1043,9 @@ router.post('/accept_challenge', function(req, res, next) {
                             if (updt_err) {
                                 res.send(updt_err);
                             } else {
-                                user_rank.find({ 'game_id': game_id }, function(rank_err, rank_result) {
+                                user_rank.find({
+                                    'game_id': game_id
+                                }, function(rank_err, rank_result) {
                                     if (rank_err) {
                                         res.send(rank_err);
                                     } else {
@@ -1008,7 +1060,9 @@ router.post('/accept_challenge', function(req, res, next) {
                                                 res.send(save_rank_err);
                                             } else {
                                                 async_node.map(NotifyUser, function(singleId, callbackNext) {
-                                                    user.findOne({ '_id': singleId }, function(notify_err, notify_result) {
+                                                    user.findOne({
+                                                        '_id': singleId
+                                                    }, function(notify_err, notify_result) {
                                                         if (notify_err) {
                                                             var error_msg = notify_err;
                                                             show_error.push(error_msg);
@@ -1067,6 +1121,10 @@ router.post('/accept_challenge', function(req, res, next) {
                                                             result.status = "success";
                                                             result.message = "Invitation accepted successfully";
                                                             console.log(result, "With error");
+                                                            socket.emit('join_game', {
+                                                                game_id: game_id,
+                                                                user_id: usrId
+                                                            })
                                                             res.json(result);
                                                         }
                                                     } else {
@@ -1074,6 +1132,10 @@ router.post('/accept_challenge', function(req, res, next) {
                                                         result.status = "success";
                                                         result.message = "Invitation accepted successfully";
                                                         console.log(result, "Not error");
+                                                        socket.emit('join_game', {
+                                                            game_id: game_id,
+                                                            user_id: usrId
+                                                        })
                                                         res.json(result);
                                                     }
                                                 });
@@ -1105,14 +1167,18 @@ router.post('/declined_challenge', function(req, res, next) {
     var game_id = req.body.game_id;
     var NotifyUser = [];
     //var NotifyUser = [];
-    user.findOne({ 'auth_token': auth_token }, function(usr_err, usr_result) {
+    user.findOne({
+        'auth_token': auth_token
+    }, function(usr_err, usr_result) {
         if (usr_err) {
             res.send(usr_err);
         } else {
             var new_opponent_array = [];
             var usrId = usr_result._id;
             var getUsrName = usr_result.name;
-            game_room.findOne({ '_id': game_id }, function(game_err, game_result) {
+            game_room.findOne({
+                '_id': game_id
+            }, function(game_err, game_result) {
                 if (game_err) {
                     res.send(game_err);
                 } else {
@@ -1149,7 +1215,9 @@ router.post('/declined_challenge', function(req, res, next) {
                             var show_error = [];
                             console.log(NotifyUser);
                             async_node.map(NotifyUser, function(singleId, callbackNext) {
-                                user.findOne({ '_id': singleId }, function(notify_err, notify_result) {
+                                user.findOne({
+                                    '_id': singleId
+                                }, function(notify_err, notify_result) {
                                     if (notify_err) {
                                         var error_msg = notify_err;
                                         show_error.push(error_msg);
@@ -1226,13 +1294,18 @@ router.post('/declined_challenge', function(req, res, next) {
 router.post('/add_friend', function(req, res, next) {
     var auth_token = req.body.auth_token;
     var opponent_id = req.body.opponent_id;
-    user.findOne({ 'auth_token': auth_token }, function(usr_err, usr_result) {
+    user.findOne({
+        'auth_token': auth_token
+    }, function(usr_err, usr_result) {
         if (usr_err) {
             res.send(usr_err);
         } else {
             if (usr_result) {
                 var userId = usr_result._id;
-                friend.findOne({ 'user_id': usr_result._id, 'friend_id': opponent_id }, function(check_existance_err, check_existance_result) {
+                friend.findOne({
+                    'user_id': usr_result._id,
+                    'friend_id': opponent_id
+                }, function(check_existance_err, check_existance_result) {
                     if (check_existance_err) {
                         res.send(check_existance_err);
                     } else {
@@ -1272,13 +1345,18 @@ router.post('/add_friend', function(req, res, next) {
 router.post('/block_friend', function(req, res, next) {
     var auth_token = req.body.auth_token;
     var opponent_id = req.body.opponent_id;
-    user.findOne({ 'auth_token': auth_token }, function(usr_err, usr_result) {
+    user.findOne({
+        'auth_token': auth_token
+    }, function(usr_err, usr_result) {
         if (usr_err) {
             res.send(usr_err);
         } else {
             if (usr_result) {
                 var userId = usr_result._id;
-                block_user.findOne({ 'user_id': userId, 'block_id': opponent_id }, function(block_exiist_err, block_exist_result) {
+                block_user.findOne({
+                    'user_id': userId,
+                    'block_id': opponent_id
+                }, function(block_exiist_err, block_exist_result) {
                     if (block_exiist_err) {
                         res.send(block_exiist_err);
                     } else {
@@ -1317,13 +1395,17 @@ router.post('/block_friend', function(req, res, next) {
 //----------------------- Function to get the block user list -------------------------------//
 router.post('/block_list', function(req, res, next) {
     var auth_token = req.body.auth_token;
-    user.findOne({ 'auth_token': auth_token }, function(usr_err, usr_result) {
+    user.findOne({
+        'auth_token': auth_token
+    }, function(usr_err, usr_result) {
         if (usr_err) {
             res.send(usr_err);
         } else {
             if (usr_result) {
                 console.log(usr_result);
-                block_user.find({ 'user_id': usr_result._id }).populate('block_id').exec(function(block_err, block_result) {
+                block_user.find({
+                    'user_id': usr_result._id
+                }).populate('block_id').exec(function(block_err, block_result) {
                     if (block_err) {
                         res.send(block_err);
                     } else {
@@ -1371,18 +1453,25 @@ router.post('/unblock_friend', function(req, res, next) {
     var auth_token = req.body.auth_token;
     var blocked_user_id = req.body.blocked_user_id;
 
-    user.findOne({ 'auth_token': auth_token }, function(usr_err, usr_result) {
+    user.findOne({
+        'auth_token': auth_token
+    }, function(usr_err, usr_result) {
         if (usr_err) {
             res.send(usr_err);
         } else {
             if (usr_result) {
                 var user_id = usr_result._id;
-                block_user.findOne({ 'user_id': user_id, 'block_id': blocked_user_id }, function(block_usr_err, block_usr_result) {
+                block_user.findOne({
+                    'user_id': user_id,
+                    'block_id': blocked_user_id
+                }, function(block_usr_err, block_usr_result) {
                     if (block_usr_err) {
                         res.send(block_usr_err);
                     } else {
                         console.log(block_usr_result);
-                        block_user.remove({ '_id': block_usr_result._id }, function(delete_block_err, delete_block_result) {
+                        block_user.remove({
+                            '_id': block_usr_result._id
+                        }, function(delete_block_err, delete_block_result) {
                             if (delete_block_err) {
                                 res.send(delete_block_err);
                             } else {
@@ -1412,7 +1501,9 @@ router.post('/get_all_friend', function(req, res, next) {
     var facebookFriend = [];
     var friendId = [];
     var new_array = [];
-    user.findOne({ 'auth_token': auth_token }, function(usr_err, usr_result) {
+    user.findOne({
+        'auth_token': auth_token
+    }, function(usr_err, usr_result) {
         if (usr_err) {
             res.send(usr_err);
         } else {
@@ -1420,7 +1511,9 @@ router.post('/get_all_friend', function(req, res, next) {
 
 
                 if (fb_friends) {
-                    friend.find({ 'user_id': usr_result._id }).populate('friend_id').exec(function(friend_err, friend_result) {
+                    friend.find({
+                        'user_id': usr_result._id
+                    }).populate('friend_id').exec(function(friend_err, friend_result) {
                         if (friend_err) {
                             res.send(friend_err);
                         } else {
@@ -1434,7 +1527,12 @@ router.post('/get_all_friend', function(req, res, next) {
                                 }
                             }
                             var fbArray = fb_friends.split(",");
-                            user.find({ '_login_type': 3, 'social_id': { $in: fbArray } }, function(fb_err, fb_result) {
+                            user.find({
+                                '_login_type': 3,
+                                'social_id': {
+                                    $in: fbArray
+                                }
+                            }, function(fb_err, fb_result) {
                                 if (fb_err) {
                                     res.send(fb_err);
                                 } else {
@@ -1444,7 +1542,10 @@ router.post('/get_all_friend', function(req, res, next) {
                                             var StringFBFriendID = String(fb_counter._id);
                                             var indexValue = friendId.indexOf(StringFBFriendID);
                                             if (indexValue == -1) {
-                                                block_user.findOne({ 'user_id': usr_result._id, 'block_id': fb_counter._id }, function(block_err, block_result) {
+                                                block_user.findOne({
+                                                    'user_id': usr_result._id,
+                                                    'block_id': fb_counter._id
+                                                }, function(block_err, block_result) {
                                                     if (block_err) {
                                                         res.send(block_err);
                                                     } else {
@@ -1497,14 +1598,19 @@ router.post('/get_all_friend', function(req, res, next) {
                     });
 
                 } else {
-                    friend.find({ 'user_id': usr_result._id }).populate('friend_id').exec(function(friend_err, friend_result) {
+                    friend.find({
+                        'user_id': usr_result._id
+                    }).populate('friend_id').exec(function(friend_err, friend_result) {
                         if (friend_err) {
                             res.send(friend_err);
                         } else {
                             if (friend_result.length > 0) {
                                 async_node.map(friend_result, function(singleFriendId, callbackNext) {
 
-                                    block_user.findOne({ 'user_id': usr_result._id, 'block_id': singleFriendId.friend_id._id }, function(block_err, block_result) {
+                                    block_user.findOne({
+                                        'user_id': usr_result._id,
+                                        'block_id': singleFriendId.friend_id._id
+                                    }, function(block_err, block_result) {
                                         if (block_err) {
                                             res.send(block_err);
                                         } else {
@@ -1567,18 +1673,25 @@ router.post('/get_all_friend', function(req, res, next) {
 router.post('/friend_data', function(req, res, next) {
     var auth_token = req.body.auth_token;
     var friend_id = req.body.friend_id;
-    user.findOne({ 'auth_token': auth_token }, function(usr_err, usr_result) {
+    user.findOne({
+        'auth_token': auth_token
+    }, function(usr_err, usr_result) {
         if (usr_err) {
             res.send(usr_err);
         } else {
             if (usr_result) {
                 var usrId = usr_result._id;
-                user.findOne({ '_id': friend_id }, function(friend_err, friend_result) {
+                user.findOne({
+                    '_id': friend_id
+                }, function(friend_err, friend_result) {
                     if (friend_err) {
                         res.send(friend_err);
                     } else {
                         if (friend_result) {
-                            block_user.findOne({ 'user_id': usrId, 'block_id': friend_id }, function(block_err, block_result) {
+                            block_user.findOne({
+                                'user_id': usrId,
+                                'block_id': friend_id
+                            }, function(block_err, block_result) {
                                 if (block_err) {
                                     res.send(block_err);
                                 } else {
@@ -1642,7 +1755,9 @@ router.post('/random_oponent', function(req, res, next) {
     var game_mode = req.body.game_mode;
     var waiting_time = req.body.waiting_time;
     var no_of_players = req.body.no_of_players;
-    user.findOne({ 'auth_token': auth_token }, function(usr_err, usr_result) {
+    user.findOne({
+        'auth_token': auth_token
+    }, function(usr_err, usr_result) {
         if (usr_err) {
             console.log("User find Error 1");
             res.send(usr_err);
@@ -1650,7 +1765,14 @@ router.post('/random_oponent', function(req, res, next) {
             if (usr_result) {
                 var usrID = usr_result._id;
                 var getUsrName = usr_result.name;
-                user.find({ '_id': { $ne: usrID }, 'device_token': { $ne: '' } }, function(usr_list_err, usr_list_result) {
+                user.find({
+                    '_id': {
+                        $ne: usrID
+                    },
+                    'device_token': {
+                        $ne: ''
+                    }
+                }, function(usr_list_err, usr_list_result) {
                     if (usr_list_err) {
                         console.log("User find Error 2");
                         res.send(usr_list_err);
@@ -1666,7 +1788,9 @@ router.post('/random_oponent', function(req, res, next) {
                                 added_user_id = shuffle(added_user_id);
                                 var opponent_id = added_user_id[0];
                                 //res.send(added_user_id);
-                                user.findOne({ '_id': opponent_id }, function(opponent_err, opponent_result) {
+                                user.findOne({
+                                    '_id': opponent_id
+                                }, function(opponent_err, opponent_result) {
                                     if (opponent_err) {
                                         console.log("User find Error 3");
                                         res.send(opponent_err);
@@ -1761,7 +1885,9 @@ router.post('/random_oponent', function(req, res, next) {
 router.post('/random_array', function(req, res, next) {
     var auth_token = req.body.auth_token;
     var language_code = req.body.language_code;
-    game_word.findOne({ 'language_code': language_code }, function(shuffle_err, shuffle_result) {
+    game_word.findOne({
+        'language_code': language_code
+    }, function(shuffle_err, shuffle_result) {
         if (shuffle_err) {
             res.send(shuffle_err);
         } else {
@@ -1794,7 +1920,9 @@ router.post('/insertWord', function(req, res, next) {
     var language_code = req.body.language_code;
     var words = req.body.word_list;
 
-    game_word.findOne({ 'language_code': language_code }, function(word_err, word_result) {
+    game_word.findOne({
+        'language_code': language_code
+    }, function(word_err, word_result) {
         if (word_err) {
             res.send(word_err);
         } else {
@@ -1809,16 +1937,16 @@ router.post('/insertWord', function(req, res, next) {
             }
             word_result.letter = exist_words;
             word_result.save(function(updt_err, updt_result) {
-                if (updt_err) {
-                    res.send(updt_err);
-                } else {
-                    var result = {};
-                    result.status = "success";
-                    result.message = "Word list updated";
-                    res.send(result);
-                }
-            })
-            //res.send(exist_words);
+                    if (updt_err) {
+                        res.send(updt_err);
+                    } else {
+                        var result = {};
+                        result.status = "success";
+                        result.message = "Word list updated";
+                        res.send(result);
+                    }
+                })
+                //res.send(exist_words);
         }
     })
 
@@ -1827,63 +1955,67 @@ router.post('/insertWord', function(req, res, next) {
 router.get('/uploadTSV', function(req, res, next) {
 
 
-    res.render('uploadTSV', { title: 'Express' });
+    res.render('uploadTSV', {
+        title: 'Express'
+    });
 
 });
 router.post('/uploadTSV', function(req, res, next) {
-    // var tsv = req.body.number;
-    // var lines=tsv.split("\n");
+        // var tsv = req.body.number;
+        // var lines=tsv.split("\n");
 
-    // var result = [];
+        // var result = [];
 
-    // var headers=lines[0].split("\t");
+        // var headers=lines[0].split("\t");
 
-    // for(var i=1;i<lines.length;i++){
-    //     console.log("details");
-    //     var obj = {};
-    //     var currentline=lines[i].split("\t");
+        // for(var i=1;i<lines.length;i++){
+        //     console.log("details");
+        //     var obj = {};
+        //     var currentline=lines[i].split("\t");
 
-    //     for(var j=0;j<headers.length;j++){
-    //           obj[headers[j]] = currentline[j];
-    //     }
+        //     for(var j=0;j<headers.length;j++){
+        //           obj[headers[j]] = currentline[j];
+        //     }
 
-    //     result.push(obj);
+        //     result.push(obj);
 
-    // }
-    // res.send(result);
-    var form = new multiparty.Form();
-    form.parse(req, function(err, fields, files) {
-        var tempPath = files.upload_csv[0].path;
-        var imageName = new Date().getTime() + path.extname(files.upload_csv[0].originalFilename);
-        var targetPath = './uploads/' + imageName;
-        var dataArray = [];
-        fs.readFile(tempPath, function(err, data) {
+        // }
+        // res.send(result);
+        var form = new multiparty.Form();
+        form.parse(req, function(err, fields, files) {
+            var tempPath = files.upload_csv[0].path;
+            var imageName = new Date().getTime() + path.extname(files.upload_csv[0].originalFilename);
+            var targetPath = './uploads/' + imageName;
+            var dataArray = [];
+            fs.readFile(tempPath, function(err, data) {
 
-            fs.writeFile(targetPath, data, function(err, data) {
-                if (err) {
-                    console.log(err);
-                    res.send(err);
-                } else {
-                    var stream = fs.createReadStream(targetPath);
-                    csv.fromStream(stream, { headers: true })
-                        .validate(function(data, next) {
-                            console.log(data);
-                        })
-                        .on("data", function(data) {
-                            console.log(data);
-                        })
-                        .on("end", function() {
-                            console.log("done");
-                            res.send("TEST");
-                            //fs.unlink(targetPath);
+                fs.writeFile(targetPath, data, function(err, data) {
+                    if (err) {
+                        console.log(err);
+                        res.send(err);
+                    } else {
+                        var stream = fs.createReadStream(targetPath);
+                        csv.fromStream(stream, {
+                                headers: true
+                            })
+                            .validate(function(data, next) {
+                                console.log(data);
+                            })
+                            .on("data", function(data) {
+                                console.log(data);
+                            })
+                            .on("end", function() {
+                                console.log("done");
+                                res.send("TEST");
+                                //fs.unlink(targetPath);
 
-                        });
-                }
+                            });
+                    }
+                });
             });
         });
-    });
-})
-//-------------- check dummy email send ----------------------------//
+    })
+    //-------------- check dummy email send ----------------------------//
 router.get('/testEmail', function(req, res, next) {
     var testHTML = '<h4>Hello Admin,</h4><br/><p>Your password hes been successfully reset. To reset your password please click on the below link</p><p><a href="http://google.com">Click here</a></p>';
     var mailOptions = {
@@ -1923,7 +2055,14 @@ router.post('/insertGame', function(req, res, next) {
     var finalID = [];
     var response = [];
     async_node.map(myArray, function(singleId, callback) {
-        test_game.findOne({ 'sender_id': userId }).elemMatch("receive_id", { "opponent_id": singleId, "status": { $ne: 2 } }).exec(function(get_err, get_result) {
+        test_game.findOne({
+            'sender_id': userId
+        }).elemMatch("receive_id", {
+            "opponent_id": singleId,
+            "status": {
+                $ne: 2
+            }
+        }).exec(function(get_err, get_result) {
             if (get_err) {
                 res.send(get_err);
             } else {
@@ -1979,7 +2118,9 @@ router.post('/updtprofileimage', function(req, res, next) {
     var auth_token = req.body.auth_token;
     var profileImage = req.body.uploaded_image;
     console.log(profileImage);
-    user.findOne({ 'auth_token': auth_token }, function(exist_err, exist_result) {
+    user.findOne({
+        'auth_token': auth_token
+    }, function(exist_err, exist_result) {
         if (exist_err) {
             res.send(exist_err);
         } else {
@@ -2002,12 +2143,16 @@ router.post('/updtprofileimage', function(req, res, next) {
 })
 router.post('/GameList', function(req, res, next) {
     var auth_token = req.body.auth_token;
-    user.findOne({ 'auth_token': auth_token }, function(usr_err, usr_result) {
+    user.findOne({
+        'auth_token': auth_token
+    }, function(usr_err, usr_result) {
         if (usr_err) {
             callback(usr_err, null);
         } else {
             if (usr_result) {
-                user_rank.find({ 'user_id': usr_result._id }).populate('game_id').exec(function(current_game_err, current_game_result) {
+                user_rank.find({
+                    'user_id': usr_result._id
+                }).populate('game_id').exec(function(current_game_err, current_game_result) {
                     if (current_game_err) {
                         res.send(current_game_err);
                     } else {
@@ -2017,7 +2162,9 @@ router.post('/GameList', function(req, res, next) {
                             async_node.map(current_game_result, function(singleGameId, callbackGame) {
                                 var user_details = [];
                                 var current_games_obj = {};
-                                user_rank.find({ 'game_id': singleGameId.game_id._id }).populate('user_id').exec(function(usr_details_err, usr_details_result) {
+                                user_rank.find({
+                                    'game_id': singleGameId.game_id._id
+                                }).populate('user_id').exec(function(usr_details_err, usr_details_result) {
                                     if (usr_details_err) {
                                         console.log(usr_details_err);
                                         callbackGame();
